@@ -1,0 +1,22 @@
+{
+  "node_id": 100,
+
+  "port": 3100 ,
+
+  "leader": "False",
+
+  "leader_address": ["192.168.0.54", 3001],
+
+  "node_list" : [
+    {
+      "node_id" : 1,
+      "address" : ["192.168.0.54", 3001],
+      "type" : "PROPOSER"
+    },
+    {
+      "node_id" : 10,
+      "address" : ["192.168.0.54", 3010],
+      "type" : "ACCEPTOR"
+    }
+  ]
+}
