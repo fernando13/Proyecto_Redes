@@ -13,10 +13,8 @@ if __name__ == '__main__':
 
     # Server Address
     udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
-    udp_port = data[1]                                     # Specified port to connect
+    udp_port = data[1]  # Specified port to connect
     server_address = (udp_host, udp_port)
-
-    print('Learner address: ', server_address)
 
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -24,22 +22,21 @@ if __name__ == '__main__':
 
     # Create Node
     node_id = data[0]
-    node_type = 'LEARNER'
+    node_list = data[2]
     quorum_size = 1
-    node_list = data[4]
 
-    server = Learner(node_id, server_address, node_type, quorum_size, node_list, sock)
+    server = Learner(node_id, server_address, quorum_size, node_list, sock)
+    print(server)
 
     while True:
         try:
             # Receive response
-            print('\nWaiting to receive...\n')
             data, address = sock.recvfrom(4096)
 
             message = Message.deserialize(data.decode())
             print(message)
 
-            """--------------------------------------------"""
+            # -----------------------------------------------
 
             if message.msg_type == "ACCEPTED":
                 from_id = message.paxos_data[0]
@@ -47,11 +44,10 @@ if __name__ == '__main__':
                 accepted_value = message.paxos_data[2]
 
                 server.receive_accepted(from_id, round, accepted_value)
-                continue
 
-            """--------------------------------------------"""
+            # -----------------------------------------------
 
-            if message.msg_type == "RESOLUTION":
+            elif message.msg_type == "RESOLUTION":
                 continue
 
         except Exception as e:

@@ -1,5 +1,6 @@
 from utils import *
 import time
+from tabulate import tabulate
 
 
 class Node(object):
@@ -10,82 +11,103 @@ class Node(object):
         self.local_address = local_address  # (UDP_IP, UDP_PORT)
         self.node_type = node_type  # Proposer/Acceptor/Learner
         self.quorum_size = quorum_size
-        self.node_list = node_list  # List of all nodes in the system --> (address, node_type)
+        self.node_list = node_list  # List of all nodes in the system --> (node_id, address, node_type)
         self.socket = socket
-        self.log = None   # index ==> [command]?
+        self.log = None  # index ==> [command, status]
+
+    def __str__(self):
+        return tabulate({'Node Type': [self.node_type],
+                         'Node ID': [str(self.node_id)],
+                         'Address': [str(self.local_address)]},
+                        headers="keys", tablefmt='fancy_grid', colalign=("center", "center", "center"))
 
 
 class Proposer(Node):
-    leader = False          # Indicates if this node is the leader
-    leader_address = None   # Address of the current leader
+    leader = False  # Indicates if this node is the leader
+    leader_address = None  # Address of the current leader
 
     round_number = 0  # Round number 'N'
-    round = None      # Round --> tuple(round_number, node_id)
+    round = None  # Round --> tuple(round_number, node_id)
 
     proposed_value = None  # Proposed value 'v'
 
     last_accepted_round = None  # Highest round reported by the Acceptors
-    promises_received = None    # Promises received from the Acceptors
+    promises_received = None  # Promises received from the Acceptors
 
-    time_quorum = 1         # Maximum time to wait for a quorum
-    waiting_quorum = None   # Indicates if the proposer is waiting for a quorum (None/time)
+    time_quorum = 1  # Maximum time to wait for a quorum
+    waiting_quorum = None  # Indicates if the proposer is waiting for a quorum (None/time)
 
-    def __init__(self, node_id, local_address, node_type, quorum_size, node_list, socket, leader=False, leader_address=None):
-        super().__init__(node_id, local_address, node_type, quorum_size, node_list, socket)
+    def __init__(self, node_id, local_address, quorum_size, node_list, socket, leader=False, leader_address=None):
+        super().__init__(node_id, local_address, 'PROPOSER', quorum_size, node_list, socket)
         self.leader = leader
         self.leader_address = leader_address
+
+    def __str__(self):
+        return super(Proposer, self).__str__()
 
     """---------------------------------------------------------------------------------"""
     """---------------------------------Bully Algorithm---------------------------------"""
 
-    time_answer = 1         # Maximum time to wait for a 'answer' message
-    waiting_answer = None   # Indicates if the node is waiting for a 'answer' message
+    time_answer = 2  # Maximum time to wait for a 'answer' message
+    waiting_answer = None  # Indicates if the node is waiting for a 'answer' message
 
-    time_heartbeat = 4                # Maximum time to wait for a 'heartbeat' message from the leader
-    waiting_heartbeat = time.time()   # *Indicates if the node is waiting for a 'heartbeat' message
+    time_heartbeat = 5  # Maximum time to wait for a 'heartbeat' message from the leader
+    waiting_heartbeat = time.time()  # *Indicates if the node is waiting for a 'heartbeat' message
 
-    time_send_heartbeat = 3   # Time to wait to send a 'heartbeat' message
-    last_heartbeat = None     # Indicates when the last heartbeat message was sent
+    time_send_heartbeat = 3  # Time to wait to send a 'heartbeat' message
+    last_heartbeat = None  # Indicates when the last heartbeat message was sent
+
+    def self_proclaimed_leader(self):
+        """ If the node has the largest ID then it proclaims himself a leader """
+        larger_nodes = [host for host in self.node_list if host.type == "PROPOSER" and host.node_id > self.node_id]
+        if not larger_nodes:
+            print("\nI proclaim myself leader")
+            self.send_coordinator()
 
     def send_election(self):
         """ Sends a 'election' message to all nodes with ID larger than mine,
         when it detected that the leader is down """
 
-        proposers_list = [node for node in self.node_list if node.type == 'PROPOSER']  # and node_id > self.node_id
+        proposers_list = [node for node in self.node_list if node.type == 'PROPOSER' and node.node_id > self.node_id]
+        data = [self.local_address]
 
         self.waiting_answer = time.time()
 
+        print("\nSending Election")
         for node in proposers_list:
-            message = Message('ELECTION')
+            message = Message('ELECTION', paxos_data=data)
             message = message.serialize().encode()
 
             # send message...
+            print(" -> To:", node.address)
             self.socket.sendto(message, node.address)
 
     def send_answer(self, address):
-        message = Message('ANSWER')
+        message = Message('ANSWER', paxos_data=[self.local_address])
         message = message.serialize().encode()
 
         # send message...
         self.socket.sendto(message, address)
 
     def send_coordinator(self):
-        """ indicates to the other nodes that it is the leader """
+        """ Indicates to the other nodes that it is the leader """
 
-        print("\nI am the Leader!")
-
+        print("\n>>> ON LEADERSHIP <<<")
         self.leader = True
-        self.leader_address = self.local_address
+        self.leader_address = tuple(self.local_address)
+        self.waiting_heartbeat = None
         self.last_heartbeat = time.time()
 
         proposers_list = [node for node in self.node_list if node.type == 'PROPOSER']
         data = [self.local_address]
 
+        print("\nSending Coordinator")
         for node in proposers_list:
             message = Message('COORDINATOR', paxos_data=data)
             message = message.serialize().encode()
 
             # send message...
+            print(" -> To:", node.address)
             self.socket.sendto(message, node.address)
 
     def receive_election(self, from_address):
@@ -94,14 +116,20 @@ class Proposer(Node):
         self.send_election()
 
     def receive_answer(self):
+        """ Received an 'answer' message from the last election it started,
+        and now it must wait for a 'coordinator' message of the next leader """
         self.waiting_answer = None
-        time.sleep(1)
+
+        # Wait a while for the elections ends
+        self.waiting_heartbeat = time.time()
 
     def receive_coordinator(self, new_leader):
         """ Choose the process that sent the message as the leader """
+        # Si yo soy mayor entonces enviar una eleccion
         self.leader = False
         self.leader_address = new_leader
         self.last_heartbeat = None
+        self.waiting_answer = None
         self.waiting_heartbeat = time.time()
 
     def send_heartbeat(self):
@@ -109,55 +137,63 @@ class Proposer(Node):
         to the other nodes every so often to let them know that it is still alive"""
 
         if self.leader and (time.time() - self.last_heartbeat >= self.time_send_heartbeat):
-            print("\n Sending Heartbeat")
 
-            proposers_list = [node for node in self.node_list if node.type == 'PROPOSER']  # and node_id > self.node_id
+            proposers_list = [node for node in self.node_list if node.type == 'PROPOSER']
 
+            # Send the data of this node
+            data = [self.node_id, self.local_address]
+
+            print("\nSending Heartbeat")
             for node in proposers_list:
-                message = Message('HEARTBEAT')
+                message = Message('HEARTBEAT', paxos_data=data)
                 message = message.serialize().encode()
 
-                print("\n To: ", node.address)
                 # send message...
+                print(" -> To:", node.address)
                 self.socket.sendto(message, node.address)
 
             self.last_heartbeat = time.time()
 
-    def receive_heartbeat(self):
+    def receive_heartbeat(self, from_id, from_address):
+        if not self.leader and self.node_id < from_id:
+            if not self.leader_address:
+                self.leader_address = from_address
+        else:
+            self.send_election()
+
+
         self.waiting_heartbeat = time.time()
 
     def heartbeat_timeout(self):
         """ Timed out to wait for an 'heartbeat' message from the leader """
         if not self.leader and self.waiting_heartbeat and (time.time() - self.waiting_heartbeat >= self.time_heartbeat):
+            print("\nLeader is down")
             self.waiting_heartbeat = None
             self.send_election()
-            print("Leader is Down")
 
     def answer_timeout(self):
         """ Timed out to wait for an 'answer' message """
         if self.waiting_answer is not None and (time.time() - self.waiting_answer >= self.time_answer):
             self.waiting_answer = None
-            self.waiting_heartbeat = None
-            print("\nAnswer Timeout")
+            print("\nAnswer timeout")
             self.send_coordinator()
 
     """---------------------------------------------------------------------------------"""
     """---------------------------------------------------------------------------------"""
 
     def receive_request(self, client_data):
-        self.proposed_value = client_data
-        self.prepare()
+        """ Receives a request from a client.
+        If the node is not the leader, forwards the message to the current leader"""
+        if self.leader:
+            self.proposed_value = client_data
+            self.prepare()
+        else:
 
-        # if self.leader:
-        #     self.proposed_value = client_data
-        #     self.prepare()
-        # else:
-        #
-        #     message = Message('REQUEST', client_data=client_data)
-        #     message = message.serialize().encode()
-        #
-        #     # send message...
-        #     self.socket.sendto(message, self.leader_address)
+            message = Message('REQUEST', client_data=client_data)
+            message = message.serialize().encode()
+
+            # send message...
+            self.socket.sendto(message, tuple(self.leader_address))
 
     """----------------------------------------------------------------------"""
 
@@ -172,8 +208,7 @@ class Proposer(Node):
                 self.send_accept(self.round, value)
 
     def prepare(self):
-        """ Sends a prepare request to all Acceptors as the first step
-        in attempting to acquire leadership of the Paxos instance """
+        """ Sends a prepare request to all Acceptors """
 
         self.promises_received = set()
         self.waiting_quorum = time.time()
@@ -190,12 +225,13 @@ class Proposer(Node):
 
         data = [round]
 
+        print("\nSending Prepare")
         for node in acceptors_list:
-            print("Sending 'Prepare' to: ", node.address)
-            message = Message('PREPARE', paxos_data=data)  # self.local_address, node[0],
+            message = Message('PREPARE', paxos_data=data)
             message = message.serialize().encode()
 
             # send message...
+            print(" -> To:", node.address)
             self.socket.sendto(message, node.address)
 
     """----------------------------------------------------------------------"""
@@ -211,7 +247,7 @@ class Proposer(Node):
         it originally wanted to propose. """
 
         # Ignore the message if it's for an old proposal or we have already received a response from this Acceptor.
-        if round[0] != self.round[0] or from_id in self.promises_received:  # if self.leader or
+        if round[0] != self.round[0] or from_id in self.promises_received:
             return
 
         self.promises_received.add(from_id)
@@ -225,11 +261,6 @@ class Proposer(Node):
         # Receives a majority of Promises from a Quorum of Acceptors.
         if len(self.promises_received) == self.quorum_size:
 
-            # Multi-paxos ----------------
-            # self.leader = True
-            # self.on_leadership_acquired()
-            # ----------------------------
-
             self.waiting_quorum = None
 
             if self.proposed_value is not None:
@@ -242,48 +273,31 @@ class Proposer(Node):
 
         data = [round, proposal_value]
 
+        print("\nSending Accept")
         for node in acceptors_list:
-            message = Message('ACCEPT', paxos_data=data)  # self.local_address, node[0],
+            message = Message('ACCEPT', paxos_data=data)
             message = message.serialize().encode()
 
             # send message...
+            print(" -> To:", node.address)
             self.socket.sendto(message, node.address)
 
     """----------------------------------------------------------------------"""
-
-    # Multi-paxos
-    def on_leadership_acquired(self):
-        """ Called when leadership has been acquired. This is not a guaranteed position.
-        Another node may assume leadership at any time and it's even possible that another
-        may have successfully done so before this callback is executed. Use this method with care.
-        The safe way to guarantee leadership is to use a full Paxos instance
-        with the resolution value being the UID of the leader node.
-        To avoid potential issues arising from timing and/or failure,
-        the election result may be restricted to a certain time window.
-        Prior to the end of the window the leader may attempt to re-elect itself to extend its term in office. """
-
-        proposers_list = [node for node in self.node_list if node.type == 'PROPOSER']
-
-        data = [self.local_address]
-
-        for node in proposers_list:
-            message = Message('LEADERSHIP', paxos_data=data)
-            message = message.serialize().encode()
-
-            # send message...
-            self.socket.sendto(message, node.address)
 
     def quorum_timeout(self):
         """ Timed out to wait for a quorum. Not enough Acceptors have answered on time. """
         if self.waiting_quorum is not None and (time.time() - self.waiting_quorum >= self.time_quorum):
             self.waiting_quorum = None
-            print("Quorum TimeOut")
+            print("\nQuorum TimeOut")
 
 
 class Acceptor(Node):
     promised_round = None  # Last promised proposal number.
     accepted_round = None  # Last accepted proposal number.
     accepted_value = None  # Last accepted value.
+
+    def __init__(self, node_id, local_address, node_list, socket):
+        super().__init__(node_id, local_address, 'ACCEPTOR', None, node_list, socket)
 
     def receive_prepare(self, from_address, round):
         """ Called when a Prepare message is received from a Proposer """
@@ -305,8 +319,11 @@ class Acceptor(Node):
 
         data = [self.node_id, round, accepted_round, accepted_value]
 
-        message = Message('PROMISE', paxos_data=data)  # self.local_address, proposer_address,
+        message = Message('PROMISE', paxos_data=data)
         message = message.serialize().encode()
+
+        print("\nSending Promise")
+        print(" -> To:", proposer_address)
 
         # send message...
         self.socket.sendto(message, proposer_address)  # ----> proposer_id es la address?
@@ -319,7 +336,6 @@ class Acceptor(Node):
         # It must accept it if and only if it has not already promised (in Phase 1b of the Paxos protocol) to only
         # consider proposals having an identifier greater than n.
         if round[0] >= self.promised_round[0]:
-
             # Register the value v (of the just received Accept message) as the accepted value (of the Protocol),
             # and send an Accepted message to the Proposer and every Learner.
             self.accepted_round = round
@@ -334,22 +350,26 @@ class Acceptor(Node):
 
         data = [self.node_id, round, accepted_value]
 
+        print("\nSending Accepted")
         for node in learner_list:
             message = Message('ACCEPTED', paxos_data=data)  # self.local_address, node[0],
             message = message.serialize().encode()
 
             # send message...
+            print(" -> To:", node.address)
             self.socket.sendto(message, node.address)
 
 
 class Learner(Node):
-
     accepted_rounds = None  # maps round_number => [accept_count, value]
 
     final_value = None  # Final value accepted
     final_round = None  # Final round accepted
 
     dictionary_data = {1: "okote", 2: "waldo", 3: "pijui", 4: "hector"}
+
+    def __init__(self, node_id, local_address, quorum_size, node_list, socket):
+        super().__init__(node_id, local_address, 'LEARNER', quorum_size, node_list, socket)
 
     def complete(self):
         return self.final_value is not None

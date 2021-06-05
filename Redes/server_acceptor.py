@@ -16,48 +16,43 @@ if __name__ == '__main__':
     udp_port = data[1]                                     # Specified port to connect
     server_address = (udp_host, udp_port)
 
-    print('Acceptor address: ', server_address)
-
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(server_address)
 
     # Create Node
     node_id = data[0]
-    node_type = 'ACCEPTOR'
-    quorum_size = None
-    node_list = data[4]
+    node_list = data[2]
 
-    server = Acceptor(node_id, server_address, node_type, quorum_size, node_list, sock)
+    server = Acceptor(node_id, server_address, node_list, sock)
+    print(server)
 
     while True:
         try:
             # Receive response
-            print('\nWaiting to receive...\n')
             data, address = sock.recvfrom(4096)
 
             message = Message.deserialize(data.decode())
-
             print(message)
 
-            """--------------------------------------------"""
+            # -----------------------------------------------
+
             if message.msg_type == "PREPARE":
                 round = message.paxos_data[0]
 
-                # server.receive_prepare(from_id, round)
                 server.receive_prepare(address, round)
-                continue
 
-            """--------------------------------------------"""
-            if message.msg_type == "ACCEPT":
+            # -----------------------------------------------
+
+            elif message.msg_type == "ACCEPT":
                 round = message.paxos_data[0]
                 value = message.paxos_data[1]
 
                 server.receive_accept(address, round, value)
-                continue
 
-            """--------------------------------------------"""
-            if message.msg_type == "RESOLUTION":
+            # -----------------------------------------------
+
+            elif message.msg_type == "RESOLUTION":
                 continue
 
         except Exception as e:

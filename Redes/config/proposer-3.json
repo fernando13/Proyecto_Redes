@@ -1,7 +1,7 @@
 {
-  "node_id": 100,
+  "node_id": 3,
 
-  "port": 3100 ,
+  "port": 3003,
 
   "node_list" : [
     {
@@ -15,15 +15,19 @@
       "type" : "PROPOSER"
     },
     {
-      "node_id" : 3,
-      "address" : ["192.168.0.54", 3003],
+      "node_id" : 4,
+      "address" : ["192.168.0.54", 3004],
       "type" : "PROPOSER"
     },
     {
       "node_id" : 10,
       "address" : ["192.168.0.54", 3010],
       "type" : "ACCEPTOR"
+    },
+    {
+      "node_id" : 100,
+      "address" : ["192.168.0.54", 3100],
+      "type" : "LEARNER"
     }
   ]
 }
-

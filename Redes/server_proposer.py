@@ -3,6 +3,7 @@ import utils as msg
 import sys
 import socket
 
+# python server_proposer.py config/proposer-1.json
 # sys.argv[1] -->  file.json
 
 if __name__ == '__main__':
@@ -16,36 +17,52 @@ if __name__ == '__main__':
     udp_port = data[1]                                     # Specified port to connect
     server_address = (udp_host, udp_port)
 
-    print(udp_host)
-    print('Proposer address: ', server_address)
-
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(server_address)
 
     # Create Node
-    node_type = 'PROPOSER'
     quorum_size = 1
     node_id = data[0]
-    leader = data[2]
-    leader_address = data[3]
-    node_list = data[4]
+    node_list = data[2]
 
-    server = Proposer(node_id, server_address, node_type, quorum_size, node_list, sock, leader, leader_address)
-    print('NODE ID: ', server.node_id)
+    server = Proposer(node_id, server_address, quorum_size, node_list, sock)
+    print(server)
 
     server.socket.setblocking(False)
-    print('\nWaiting to receive...\n')
+
+    # If the node has the largest ID then it proclaims himself a leader
+    server.self_proclaimed_leader()
+
     while True:
         try:
-
             # Receive response
             data, address = sock.recvfrom(4096)
 
             message = msg.Message.deserialize(data.decode())
             print(message)
 
+            """-------------------------------------------------------"""
+
+            # Timed out to wait for a quorum.
+            server.quorum_timeout()
+
+            """-------------------------------------------------------"""
             """--------------------Bully-Algorithm--------------------"""
+
+            # Timed out to wait for an 'answer' message.
+            server.answer_timeout()
+
+            # Timed out to wait for a 'heartbeat' message
+            server.heartbeat_timeout()
+
+            # It's time to send a 'heartbeat' message
+            server.send_heartbeat()
+
+            if message.msg_type == "COORDINATOR":
+                new_leader = tuple(message.paxos_data[0])
+                server.receive_coordinator(new_leader)
+                continue
 
             if message.msg_type == "ELECTION":
                 server.receive_election(address)
@@ -55,20 +72,15 @@ if __name__ == '__main__':
                 server.receive_answer()
                 continue
 
-            if message.msg_type == "COORDINATOR":
-                server.receive_coordinator(message.paxos_data[0])
-                continue
+            if message.msg_type == "HEARTBEAT":
+                from_id = message.paxos_data[0]
+                from_address = tuple(message.paxos_data[1])
 
-            # enviar cada tanto tiempo...
-            # server.send_heartbeat()
+                server.receive_heartbeat(from_id, from_address)
+                continue
 
             """--------------------End-Bully-Algorithm------------------"""
             """---------------------------------------------------------"""
-
-            # Timed out to wait for a quorum.
-            server.quorum_timeout()
-
-            """--------------------------------------------"""
 
             if message.msg_type == "REQUEST":
                 server.receive_request(message.client_data)
@@ -87,12 +99,6 @@ if __name__ == '__main__':
 
             """--------------------------------------------"""
 
-            if message.msg_type == "LEADERSHIP":
-                server.leader_address = tuple(message.paxos_data[0])
-                continue
-
-            """--------------------------------------------"""
-
             if message.msg_type == "ACCEPTED":
                 continue
 
@@ -102,19 +108,21 @@ if __name__ == '__main__':
                 continue
 
         except socket.error as e:
+            # Error: 10035 --> server didn't receive data from 'sock.recvfrom(4096)'
+            # Error: 10054 --> problems contacting another node
             if e.args[0] == 10035 or e.args[0] == 10054:
 
                 # Timed out to wait for a quorum.
                 server.quorum_timeout()
 
-                # # Timed out to wait for an 'answer' message.
-                # server.answer_timeout()
-                #
-                # # Timed out to wait for a 'heartbeat' message
-                # server.heartbeat_timeout()
-                #
-                # # It's time to send a 'heartbeat' message
-                # server.send_heartbeat()
+                # Timed out to wait for an 'answer' message.
+                server.answer_timeout()
+
+                # Timed out to wait for a 'heartbeat' message
+                server.heartbeat_timeout()
+
+                # It's time to send a 'heartbeat' message
+                server.send_heartbeat()
 
             else:
                 print(e)
