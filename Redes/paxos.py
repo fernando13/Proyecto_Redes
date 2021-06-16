@@ -13,7 +13,18 @@ class Node(object):
         self.quorum_size = quorum_size
         self.node_list = node_list  # List of all nodes in the system --> (node_id, address, node_type)
         self.socket = socket
-        self.log = None  # index ==> [command, status]
+        self.logs = [None for x in range(10)]  # index ==> [command, status]
+        self.dictionary_data = {1: "okote", 2: "waldo", 3: "pijui", 4: "hector"}
+
+    def find_unknown_entry(self, start_index=0):
+        """Find s the smallest log position that is unknown to this node"""
+        index = start_index
+        for index in range(start_index, len(self.logs)):
+            if not self.logs[index]:  # or self.logs[index][1] == "UNKNOWN"
+                return index
+
+        self.logs.append(None)
+        return index + 1
 
     def __str__(self):
         return tabulate({'Node Type': [self.node_type],
@@ -26,16 +37,23 @@ class Proposer(Node):
     leader = False  # Indicates if this node is the leader
     leader_address = None  # Address of the current leader
 
-    round_number = 0  # Round number 'N'
-    round = None  # Round --> tuple(round_number, node_id)
+    # round_number = 0  # Round number 'N'
+    # round = None  # Round --> tuple(round_number, node_id)
 
-    proposed_value = None  # Proposed value 'v'
+    # proposed_value = None  # Proposed value 'v'
 
-    last_accepted_round = None  # Highest round reported by the Acceptors
-    promises_received = None  # Promises received from the Acceptors
+    # last_accepted_round = None  # Highest round reported by the Acceptors
+    # promises_received = None  # Promises received from the Acceptors
 
     time_quorum = 1  # Maximum time to wait for a quorum
     waiting_quorum = None  # Indicates if the proposer is waiting for a quorum (None/time)
+
+    skip_phase_one = False
+
+    instances = dict()   # instances[index] = [round_number, proposed_value, last_accepted_round, promises_received]
+
+    # if index not in self.instances:
+    #     self.instances[index] = [promised_round, accepted_round, accepted_value]
 
     def __init__(self, node_id, local_address, quorum_size, node_list, socket, leader=False, leader_address=None):
         super().__init__(node_id, local_address, 'PROPOSER', quorum_size, node_list, socket)
@@ -51,11 +69,11 @@ class Proposer(Node):
     time_answer = 2  # Maximum time to wait for a 'answer' message
     waiting_answer = None  # Indicates if the node is waiting for a 'answer' message
 
-    time_heartbeat = 5  # Maximum time to wait for a 'heartbeat' message from the leader
-    waiting_heartbeat = time.time()  # *Indicates if the node is waiting for a 'heartbeat' message
-
-    time_send_heartbeat = 3  # Time to wait to send a 'heartbeat' message
+    time_send_heartbeat = 2  # Time to wait to send a 'heartbeat' message
     last_heartbeat = None  # Indicates when the last heartbeat message was sent
+
+    time_heartbeat = time_send_heartbeat * 2  # Maximum time to wait for a 'heartbeat' message from the leader
+    waiting_heartbeat = time.time()           # Indicates if the node is waiting for a 'heartbeat' message
 
     def self_proclaimed_leader(self):
         """ If the node has the largest ID then it proclaims himself a leader """
@@ -125,7 +143,7 @@ class Proposer(Node):
 
     def receive_coordinator(self, new_leader):
         """ Choose the process that sent the message as the leader """
-        # Si yo soy mayor entonces enviar una eleccion
+        # Si yo soy mayor entonces enviar una eleccion?
         self.leader = False
         self.leader_address = new_leader
         self.last_heartbeat = None
@@ -143,13 +161,13 @@ class Proposer(Node):
             # Send the data of this node
             data = [self.node_id, self.local_address]
 
-            print("\nSending Heartbeat")
+            # print("\nSending Heartbeat")
             for node in proposers_list:
                 message = Message('HEARTBEAT', paxos_data=data)
                 message = message.serialize().encode()
 
                 # send message...
-                print(" -> To:", node.address)
+                # print(" -> To:", node.address)
                 self.socket.sendto(message, node.address)
 
             self.last_heartbeat = time.time()
@@ -160,7 +178,6 @@ class Proposer(Node):
                 self.leader_address = from_address
         else:
             self.send_election()
-
 
         self.waiting_heartbeat = time.time()
 
@@ -185,8 +202,26 @@ class Proposer(Node):
         """ Receives a request from a client.
         If the node is not the leader, forwards the message to the current leader"""
         if self.leader:
-            self.proposed_value = client_data
-            self.prepare()
+            if client_data[1] == "GET":
+                key = int(client_data[2])
+                client_address = tuple(client_data[0])
+
+                message = str(self.dictionary_data[key])
+
+                # Send response message to the client...
+                self.socket.sendto(message.encode(), client_address)
+
+            if self.skip_phase_one:
+                index = self.find_unknown_entry(0)
+
+                # If that instance has no data, I create a new.
+                if index not in self.instances:
+                    self.instances[index] = [(0, self.node_id), client_data, None, set()]
+
+                self.send_accept(index, (0, self.node_id), client_data)
+            else:
+                self.prepare(client_data)
+
         else:
 
             message = Message('REQUEST', client_data=client_data)
@@ -197,33 +232,41 @@ class Proposer(Node):
 
     """----------------------------------------------------------------------"""
 
-    # Multi-paxos
-    def set_proposal(self, value):
-        """ Sets the proposal value for this node iff this node is not already aware of
-        another proposal having already been accepted. """
-        if self.proposed_value is None:
-            self.proposed_value = value
-
-            if self.leader:
-                self.send_accept(self.round, value)
-
-    def prepare(self):
+    def prepare(self, client_value, start_index=0):
         """ Sends a prepare request to all Acceptors """
+        # [round_number, proposed_value, last_accepted_round, promises_received]
 
-        self.promises_received = set()
+        index = self.find_unknown_entry(start_index)
+
+        # If that instance has no data, I create a new.
+        if index not in self.instances:
+            self.instances[index] = [(0, self.node_id), client_value, None, set()]
+
+        round = self.instances[index][0]
+        round = (round[0] + 1, round[1])  # round =+ 1
+
+        self.instances[index][0] = round
+
         self.waiting_quorum = time.time()
 
-        self.round_number += 1
-        self.round = (self.round_number, self.node_id)
+        self.send_prepare(index, round)
 
-        self.send_prepare(self.round)
+        # -------------------------------------------------------------
+        # ------------------------ Old Version ------------------------
+        # self.promises_received = set()
+        # self.waiting_quorum = time.time()
+        #
+        # self.round_number += 1
+        # self.round = (self.round_number, self.node_id)
+        #
+        # self.send_prepare(self.round)
 
-    def send_prepare(self, round):
+    def send_prepare(self, index, round):
         """ Broadcasts a Prepare message to all Acceptors """
 
         acceptors_list = [node for node in self.node_list if node.type == 'ACCEPTOR']
 
-        data = [round]
+        data = [index, round]
 
         print("\nSending Prepare")
         for node in acceptors_list:
@@ -236,7 +279,7 @@ class Proposer(Node):
 
     """----------------------------------------------------------------------"""
 
-    def receive_promise(self, from_id, round, prev_accepted_round, prev_accepted_value):
+    def receive_promise(self, from_id, index, round, prev_accepted_round, prev_accepted_value):
         """ Called when a Promise message is received from an Acceptor """
 
         """ If a Proposer receives a majority of Promises from a Quorum of Acceptors,
@@ -246,32 +289,68 @@ class Proposer(Node):
         If none of the Acceptors had accepted a proposal up to this point, then the Proposer may choose the value
         it originally wanted to propose. """
 
+        # [round_number, proposed_value, last_accepted_round, promises_received]
+
+        # Get data from the given instance.
+        round_i = self.instances[index][0]
+        proposed_value = self.instances[index][1]
+        last_accepted_round = self.instances[index][2]
+        promises_received = self.instances[index][3]
+
         # Ignore the message if it's for an old proposal or we have already received a response from this Acceptor.
-        if round[0] != self.round[0] or from_id in self.promises_received:
+        if round[0] != round_i[0] or from_id in promises_received:
             return
 
-        self.promises_received.add(from_id)
+        promises_received.add(from_id)
 
         # Save the highest proposal number reported by the Acceptors.
         if prev_accepted_round is not None:
-            if self.last_accepted_round is None or prev_accepted_round[0] > self.last_accepted_round[0]:
-                self.last_accepted_round = prev_accepted_round
-                self.proposed_value = prev_accepted_value
+            if last_accepted_round is None or prev_accepted_round[0] > last_accepted_round[0]:
+                last_accepted_round = prev_accepted_round
+                proposed_value = prev_accepted_value
+
+        # Save the current instance data.
+        self.instances[index] = [round_i, proposed_value, last_accepted_round, promises_received]
 
         # Receives a majority of Promises from a Quorum of Acceptors.
-        if len(self.promises_received) == self.quorum_size:
+        if len(promises_received) == self.quorum_size:
 
             self.waiting_quorum = None
+            self.skip_phase_one = True
 
-            if self.proposed_value is not None:
-                self.send_accept(self.round, self.proposed_value)
+            if proposed_value is not None:
+                self.send_accept(index, round_i, proposed_value)
 
-    def send_accept(self, round, proposal_value):
+        # -------------------------------------------------------------
+        # ------------------------ Old Version ------------------------
+
+        # # Ignore the message if it's for an old proposal or we have already received a response from this Acceptor.
+        # if round[0] != self.round[0] or from_id in self.promises_received:
+        #     return
+        #
+        # self.promises_received.add(from_id)
+        #
+        # # Save the highest proposal number reported by the Acceptors.
+        # if prev_accepted_round is not None:
+        #     if self.last_accepted_round is None or prev_accepted_round[0] > self.last_accepted_round[0]:
+        #         self.last_accepted_round = prev_accepted_round
+        #         self.proposed_value = prev_accepted_value
+        #
+        # # Receives a majority of Promises from a Quorum of Acceptors.
+        # if len(self.promises_received) == self.quorum_size:
+        #
+        #     self.waiting_quorum = None
+        #     self.skip_phase_one = True
+        #
+        #     if self.proposed_value is not None:
+        #         self.send_accept(self.round, self.proposed_value)
+
+    def send_accept(self, index, round, proposal_value):
         """ Broadcasts an Accept! message to all Acceptors """
 
         acceptors_list = [node for node in self.node_list if node.type == 'ACCEPTOR']
 
-        data = [round, proposal_value]
+        data = [index, round, proposal_value]
 
         print("\nSending Accept")
         for node in acceptors_list:
@@ -284,6 +363,17 @@ class Proposer(Node):
 
     """----------------------------------------------------------------------"""
 
+    def send_replicate(self, data):
+
+        proposers_list = [node for node in self.node_list if node.type == 'PROPOSER']
+
+        for node in proposers_list:
+            message = Message('REPLICATE', paxos_data=data)
+            message = message.serialize().encode()
+
+            # send message...
+            self.socket.sendto(message, node.address)
+
     def quorum_timeout(self):
         """ Timed out to wait for a quorum. Not enough Acceptors have answered on time. """
         if self.waiting_quorum is not None and (time.time() - self.waiting_quorum >= self.time_quorum):
@@ -292,14 +382,16 @@ class Proposer(Node):
 
 
 class Acceptor(Node):
-    promised_round = None  # Last promised proposal number.
-    accepted_round = None  # Last accepted proposal number.
-    accepted_value = None  # Last accepted value.
+    # promised_round = None  # Last promised proposal number.
+    # accepted_round = None  # Last accepted proposal number.
+    # accepted_value = None  # Last accepted value.
+
+    instance = dict()  # instances[index] = [promised_round, accepted_round, accepted_value]
 
     def __init__(self, node_id, local_address, node_list, socket):
         super().__init__(node_id, local_address, 'ACCEPTOR', None, node_list, socket)
 
-    def receive_prepare(self, from_address, round):
+    def receive_prepare(self, from_address, index, round):
         """ Called when a Prepare message is received from a Proposer """
 
         """ If N is higher than every previous proposal number received, from any of the Proposers, by the Acceptor,
@@ -310,14 +402,35 @@ class Acceptor(Node):
         For the sake of optimization, sending a denial (Nack) response would tell the Proposer
         that it can stop its attempt to create consensus with proposal n. """
 
-        if not self.promised_round or round[0] > self.promised_round[0]:
-            self.promised_round = round
-            self.send_promise(from_address, round, self.accepted_round, self.accepted_value)
+        # Get data from the given instance.
+        if index not in self.instance:
+            self.instance[index] = [None, None, None]
 
-    def send_promise(self, proposer_address, round, accepted_round, accepted_value):
+        # Get data from the given instance.
+        promised_round = self.instance[index][0]
+        accepted_round = self.instance[index][1]
+        accepted_value = self.instance[index][2]
+
+        # This round is higher than every previous round received.
+        if not promised_round or round[0] > promised_round[0]:
+            promised_round = round
+
+            # Save the current instance data.
+            self.instance[index] = [promised_round, accepted_round, accepted_value]
+
+            # Send a Promise message.
+            self.send_promise(from_address, index, round, accepted_round, accepted_value)
+
+        # -------------------------------------------------------------
+        # ------------------------ Old Version ------------------------
+        # if not self.promised_round or round[0] > self.promised_round[0]:
+        #     self.promised_round = round
+        #     self.send_promise(from_address, round, self.accepted_round, self.accepted_value)
+
+    def send_promise(self, proposer_address, index, round, accepted_round, accepted_value):
         """ Sends a Promise message to the specified Proposer """
 
-        data = [self.node_id, round, accepted_round, accepted_value]
+        data = [self.node_id, index, round, accepted_round, accepted_value]
 
         message = Message('PROMISE', paxos_data=data)
         message = message.serialize().encode()
@@ -326,33 +439,62 @@ class Acceptor(Node):
         print(" -> To:", proposer_address)
 
         # send message...
-        self.socket.sendto(message, proposer_address)  # ----> proposer_id es la address?
+        self.socket.sendto(message, proposer_address)
 
     """----------------------------------------------------------------------"""
 
-    def receive_accept(self, from_address, round, value):
+    def receive_accept(self, from_address, index, round, value):
         """ Called when an Accept! message is received from a Proposer """
+
+        # If that instance has no data, I create a new.
+        if index not in self.instance:
+            self.instance[index] = [None, None, None]
+
+        # Get data from the given instance.
+        promised_round = self.instance[index][0]
+        accepted_round = self.instance[index][1]
+        accepted_value = self.instance[index][2]
+
+        # [promised_round, accepted_round, accepted_value]
+        print(self.instance[index])
 
         # It must accept it if and only if it has not already promised (in Phase 1b of the Paxos protocol) to only
         # consider proposals having an identifier greater than n.
-        if round[0] >= self.promised_round[0]:
+        if not promised_round or round[0] >= promised_round[0]:
             # Register the value v (of the just received Accept message) as the accepted value (of the Protocol),
             # and send an Accepted message to the Proposer and every Learner.
-            self.accepted_round = round
-            self.accepted_value = value
-            self.send_accepted(from_address, round, self.accepted_value)
 
-    def send_accepted(self, from_address, round, accepted_value):
+            accepted_round = round
+            accepted_value = value
+
+            # Save the current instance data.
+            self.instance[index] = [promised_round, accepted_round, accepted_value]
+
+            # Send a Accepted message.
+            self.send_accepted(from_address, index, round, accepted_value)
+
+        # -------------------------------------------------------------
+        # ------------------------ Old Version ------------------------
+        # # It must accept it if and only if it has not already promised (in Phase 1b of the Paxos protocol) to only
+        # # consider proposals having an identifier greater than n.
+        # if round[0] >= self.promised_round[0]:
+        #     # Register the value v (of the just received Accept message) as the accepted value (of the Protocol),
+        #     # and send an Accepted message to the Proposer and every Learner.
+        #     self.accepted_round = round
+        #     self.accepted_value = value
+        #     self.send_accepted(from_address, round, self.accepted_value)
+
+    def send_accepted(self, proposer_address, index, round, accepted_value):
         """ Broadcasts an Accepted message to all Learners and to the Proposer """
 
         learner_list = [node for node in self.node_list if node.type == 'LEARNER']
-        learner_list.append(Host(None, from_address, 'PROPOSER'))  # Add the proposer address to the list.
+        # learner_list.append(Host(None, from_address, 'PROPOSER'))  # Add the proposer address to the list.
 
-        data = [self.node_id, round, accepted_value]
+        data = [proposer_address, self.node_id, index, round, accepted_value]
 
         print("\nSending Accepted")
         for node in learner_list:
-            message = Message('ACCEPTED', paxos_data=data)  # self.local_address, node[0],
+            message = Message('ACCEPTED', paxos_data=data)
             message = message.serialize().encode()
 
             # send message...
@@ -362,56 +504,101 @@ class Acceptor(Node):
 
 class Learner(Node):
     accepted_rounds = None  # maps round_number => [accept_count, value]
-
     final_value = None  # Final value accepted
     final_round = None  # Final round accepted
 
-    dictionary_data = {1: "okote", 2: "waldo", 3: "pijui", 4: "hector"}
+    instance = dict()  # instances[index] = [accepted_rounds, final_value, final_round]
 
     def __init__(self, node_id, local_address, quorum_size, node_list, socket):
         super().__init__(node_id, local_address, 'LEARNER', quorum_size, node_list, socket)
 
-    def complete(self):
-        return self.final_value is not None
-
-    def receive_accepted(self, from_id, round, accepted_value):
+    def receive_accepted(self, proposer_address, from_id, index, round, accepted_value):
         """
         Called when an Accepted message is received from an acceptor
         """
-
         round_number = round[0]
 
-        # The paxos protocol is already done.
-        if self.complete():
+        # If that instance has no data, I create a new.
+        if index not in self.instance:
+            self.instance[index] = [dict(), None, None]
+
+        # Get data from the given instance.
+        accepted_rounds = self.instance[index][0]
+        final_round = self.instance[index][1]
+        final_value = self.instance[index][2]
+
+        # The paxos protocol is already done.****
+        if final_value is not None:
             return
 
-        if self.accepted_rounds is None:
-            self.accepted_rounds = dict()
-
         # If the current round is not registered, I register it.
-        if round_number not in self.accepted_rounds:
-            self.accepted_rounds[round_number] = [set(), accepted_value]
+        if round_number not in accepted_rounds:
+            accepted_rounds[round_number] = [set(), accepted_value]
 
-        # proposal_id => [accept_count, value]
-        current_round = self.accepted_rounds[round_number]
+        # Increments the quantity of 'Accepted' messages received for this round.
+        # accepted_rounds[round_num] => [accept_count, value]
+        current_round = accepted_rounds[round_number]
         current_round[0].add(from_id)
 
-        # Receives a majority of Accepted messages from a Quorum of Acceptors.
+        # Receives a majority of 'Accepted' messages from a Quorum of Acceptors.
         if len(current_round[0]) >= self.quorum_size:
-            self.final_value = accepted_value
-            self.final_round = round_number
-            self.accepted_rounds = None
+            final_value = accepted_value
+            final_round = round_number
 
-            self.on_resolution(round_number, accepted_value)
+            # Save the current instance data.
+            self.instance[index] = [accepted_rounds, final_round, final_value]
 
-    def on_resolution(self, proposer_id, value):
+            self.on_resolution(proposer_address, index, round_number, accepted_value)
+        else:
+            # Save the current instance data.
+            self.instance[index] = [accepted_rounds, final_round, final_value]
+
+        # -------------------------------------------------------------
+        # ------------------------ Old Version ------------------------
+        # round_number = round[0]
+        #
+        # # The paxos protocol is already done.
+        # if self.complete():
+        #     return
+        #
+        # if self.accepted_rounds is None:
+        #     self.accepted_rounds = dict()
+        #
+        # # If the current round is not registered, I register it.
+        # if round_number not in self.accepted_rounds:
+        #     self.accepted_rounds[round_number] = [set(), accepted_value]
+        #
+        # # proposal_id => [accept_count, value]
+        # current_round = self.accepted_rounds[round_number]
+        # current_round[0].add(from_id)
+        #
+        # # Receives a majority of Accepted messages from a Quorum of Acceptors.
+        # if len(current_round[0]) >= self.quorum_size:
+        #     self.final_value = accepted_value
+        #     self.final_round = round_number
+        #     self.accepted_rounds = None
+        #
+        #     self.on_resolution(round_number, accepted_value)
+
+    def on_resolution(self, proposer_address, index, round, value):
         """ Called when a resolution is reached """
-        if value[1] == 'SET':
-            key = int(value[2])
-            new_value = value[3]
-            self.dictionary_data[key] = new_value
 
-        message = str(self.dictionary_data)
+        data = [index, value]
+        message = Message('RESOLUTION', paxos_data=data)
+        message = message.serialize().encode()
 
         # send message...
-        self.socket.sendto(message.encode(), tuple(value[0]))
+        self.socket.sendto(message, tuple(proposer_address))
+
+        # -------------------------------------------------------------
+        # ------------------------ Old Version ------------------------
+        # if value[1] == 'SET':
+        #     key = int(value[2])
+        #     new_value = value[3]
+        #     self.dictionary_data[key] = new_value
+        #
+        # message = str(self.dictionary_data)
+        #
+        # # send message...
+        # self.socket.sendto(message.encode(), tuple(value[0]))
+

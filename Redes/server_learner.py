@@ -39,11 +39,13 @@ if __name__ == '__main__':
             # -----------------------------------------------
 
             if message.msg_type == "ACCEPTED":
-                from_id = message.paxos_data[0]
-                round = message.paxos_data[1]
-                accepted_value = message.paxos_data[2]
+                proposer_address = message.paxos_data[0]
+                from_id = message.paxos_data[1]
+                index = message.paxos_data[2]
+                round = message.paxos_data[3]
+                accepted_value = message.paxos_data[4]
 
-                server.receive_accepted(from_id, round, accepted_value)
+                server.receive_accepted(proposer_address, from_id, index, round, accepted_value)
 
             # -----------------------------------------------
 
@@ -51,5 +53,5 @@ if __name__ == '__main__':
                 continue
 
         except Exception as e:
-            print(e)
+            print("Error :", e)
             continue

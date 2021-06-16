@@ -90,11 +90,12 @@ if __name__ == '__main__':
 
             if message.msg_type == "PROMISE":
                 node_id = message.paxos_data[0]
-                round = message.paxos_data[1]
-                prev_accepted_round = message.paxos_data[2]
-                prev_accepted_value = message.paxos_data[3]
+                index = message.paxos_data[1]
+                round = message.paxos_data[2]
+                prev_accepted_round = message.paxos_data[3]
+                prev_accepted_value = message.paxos_data[4]
 
-                server.receive_promise(node_id, round, prev_accepted_round, prev_accepted_value)
+                server.receive_promise(node_id, index, round, prev_accepted_round, prev_accepted_value)
                 continue
 
             """--------------------------------------------"""
@@ -105,6 +106,40 @@ if __name__ == '__main__':
             """--------------------------------------------"""
 
             if message.msg_type == "RESOLUTION":
+                index = message.paxos_data[0]
+                value = message.paxos_data[1]
+
+                # Update the log.
+                server.logs[index] = value[1:]
+
+                # Do the received command.
+                key = int(value[2])
+                new_value = value[3]
+                server.dictionary_data[key] = new_value
+
+                # Replicate the command to the others nodes
+                server.send_replicate(message.paxos_data)
+
+                print("\nLogs: ", server.logs)
+                message = str(server.logs)
+
+                # Send response to the client...
+                server.socket.sendto(message.encode(), tuple(value[0]))
+                continue
+
+            """--------------------------------------------"""
+
+            if message.msg_type == "REPLICATE":
+                index = message.paxos_data[0]
+                value = message.paxos_data[1]
+
+                # Update the log.
+                server.logs[index] = value[1:]
+
+                # Do the received command.
+                key = int(value[2])
+                new_value = value[3]
+                server.dictionary_data[key] = new_value
                 continue
 
         except socket.error as e:
@@ -125,9 +160,9 @@ if __name__ == '__main__':
                 server.send_heartbeat()
 
             else:
-                print(e)
+                print("Error :", e)
 
         except Exception as e:
-            print(e)
+            print("Error :", e)
 
 

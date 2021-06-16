@@ -38,17 +38,19 @@ if __name__ == '__main__':
             # -----------------------------------------------
 
             if message.msg_type == "PREPARE":
-                round = message.paxos_data[0]
+                index = message.paxos_data[0]
+                round = message.paxos_data[1]
 
-                server.receive_prepare(address, round)
+                server.receive_prepare(address, index, round)
 
             # -----------------------------------------------
 
             elif message.msg_type == "ACCEPT":
-                round = message.paxos_data[0]
-                value = message.paxos_data[1]
+                index = message.paxos_data[0]
+                round = message.paxos_data[1]
+                value = message.paxos_data[2]
 
-                server.receive_accept(address, round, value)
+                server.receive_accept(address, index, round, value)
 
             # -----------------------------------------------
 
@@ -56,5 +58,5 @@ if __name__ == '__main__':
                 continue
 
         except Exception as e:
-            print(e)
+            print("Error :", e)
             continue

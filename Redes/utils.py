@@ -13,6 +13,9 @@ class Message(object):
     def __str__(self):
 
         msg = "\nMessage received: \n"
+
+        # -------------------------------------------------------------------------------------------------------------
+
         if self.msg_type == "REQUEST":
             msg += tabulate(
                 [[self.msg_type, self.client_data[0], (self.client_data[1], self.client_data[2], self.client_data[3])]],
@@ -20,76 +23,64 @@ class Message(object):
                 colalign=("center", "center", "center"))
             return msg
 
+        # -------------------------------------------------------------------------------------------------------------
+
         if self.msg_type == "PREPARE":
-            msg += tabulate([[self.msg_type, "Round: " + str(self.paxos_data[0])]],
-                            tablefmt='fancy_grid', colalign=("center", "center"))
+            msg += tabulate([[self.msg_type,
+                              "Index: " + str(self.paxos_data[0]),
+                              "Round: " + str(self.paxos_data[1])]],
+                            tablefmt='fancy_grid', colalign=("center", "center", "center"))
             return msg
+
+        # -------------------------------------------------------------------------------------------------------------
 
         if self.msg_type == "PROMISE":
             msg += tabulate(
-                [[self.msg_type, self.paxos_data[0], self.paxos_data[1], self.paxos_data[2], (self.paxos_data[3][1:] if self.paxos_data[3] else None)]],
-                headers=["Type", "Node ID", "Round", "Accepted round", "Accepted value"],
-                tablefmt='fancy_grid', missingval='N/A', colalign=("center", "center", "center", "center", "center"))
+                [[self.msg_type, self.paxos_data[0], self.paxos_data[1], self.paxos_data[2], self.paxos_data[3],
+                  (self.paxos_data[4][1:] if self.paxos_data[4] else None)]],
+                headers=["Type", "Node ID", "Index", "Round", "Accepted round", "Accepted value"],
+                tablefmt='fancy_grid', missingval='N/A',
+                colalign=("center", "center", "center", "center", "center", "center"))
             return msg
+
+        # -------------------------------------------------------------------------------------------------------------
 
         if self.msg_type == "ACCEPT":
-            msg += tabulate([[self.msg_type, self.paxos_data[0], self.paxos_data[1][1:]]],
-                            headers=["Type", "Round", "Proposed value"], tablefmt='fancy_grid',
-                            colalign=("center", "center", "center"))
-            return msg
-
-        if self.msg_type == "ACCEPTED":
             msg += tabulate([[self.msg_type, self.paxos_data[0], self.paxos_data[1], self.paxos_data[2][1:]]],
-                            headers=["Type", "Node ID", "Round", "Accepted value"], tablefmt='fancy_grid',
+                            headers=["Type", "Index", "Round", "Proposed value"], tablefmt='fancy_grid',
                             colalign=("center", "center", "center", "center"))
             return msg
 
-        msg = "\n"
+        # -------------------------------------------------------------------------------------------------------------
+
+        if self.msg_type == "ACCEPTED":
+            msg += tabulate([[self.msg_type, self.paxos_data[1], self.paxos_data[2], self.paxos_data[3], self.paxos_data[4][1:]]],
+                            headers=["Type", "Node ID", "Index", "Round", "Accepted value"], tablefmt='fancy_grid',
+                            colalign=("center", "center", "center", "center", "center"))
+            return msg
+
+        # -------------------------------------------------------------------------------------------------------------
+
         if self.msg_type == "COORDINATOR":
             msg += tabulate([[self.msg_type, "New leader: " + str(self.paxos_data[0])]],
                             tablefmt='fancy_grid', colalign=("center", "center"))
             return msg
+
+        # -------------------------------------------------------------------------------------------------------------
 
         if self.msg_type == "ELECTION":
             msg += tabulate([[self.msg_type, "From: " + str(self.paxos_data[0])]],
                             tablefmt='fancy_grid', colalign=("center", "center"))
             return msg
 
+        # -------------------------------------------------------------------------------------------------------------
+
         if self.msg_type == "ANSWER":
             msg += tabulate([[self.msg_type, "From: " + str(self.paxos_data[0])]],
                             tablefmt='fancy_grid', colalign=("center", "center"))
             return msg
 
-        # if self.msg_type == "HEARTBEAT":
-        #     return tabulate([[self.msg_type, "From: (" + str(self.paxos_data[0]) + ") " + str(self.paxos_data[1])]],
-        #                     tablefmt='fancy_grid', colalign=("center", "center"))
-
         return "\n---" + self.msg_type + "---"
-
-        # elif self.msg_type == "HEARTBEAT":
-        #     return tabulate([[self.msg_type, "From: (" + str(self.paxos_data[0]) + ") " + str(self.paxos_data[1])]],
-        #                     tablefmt='fancy_grid', colalign=("center", "center"))
-
-        # return tabulate({'Node Type': [self.node_type],
-        #                  'Node ID': [str(self.node_id)],
-        #                  'Address': [str(self.local_address)]},
-        #                 headers="keys", tablefmt='fancy_grid', colalign=("center", "center", "center"))
-        #
-        # max_len = 63
-        # msg = "\n--- " + self.msg_type + " ----------------------------------------------"
-        # msg += "-" * (max_len-len(msg))
-        #
-        # if self.msg_type not in ('ELECTION', 'ANSWER', 'COORDINATOR', 'HEARTBEAT'):
-        #
-        #     if self.client_data:
-        #         msg += "\n* Client Data: " + str(self.client_data)
-        #
-        #     if self.paxos_data:
-        #         msg += "\n* Data: " + str(self.paxos_data)
-        #
-        # msg += "\n" + "-" * (max_len-1)
-
-        return msg
 
     def serialize(self):
         return json.dumps(self, default=lambda o: o.__dict__, indent=4)
