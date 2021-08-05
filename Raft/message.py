@@ -59,7 +59,7 @@ class Message(object):
             msg.command = Command(**msg.command)
 
         if msg.entries:
-            msg.entries = [Log(log) for log in msg.entries]
+            msg.entries = [Log(Command(**log['command']), log['term']) for log in msg.entries]
 
         return msg
 

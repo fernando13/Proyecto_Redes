@@ -7,21 +7,6 @@ def deserialize(object_type, json_data):
     return object_type(**json.loads(json_data))
 
 
-def read_file(json_file):
-    file = open(json_file, "r")
-    content = file.read()
-    data = json.loads(content)
-
-    node_id = int(data["node_id"])
-    port = int(data["port"])
-    node_list = [Host(**node) for node in data["node_list"]]
-
-    return node_id, port, node_list
-
-
-Log = collections.namedtuple('Log', ['command', 'term'])
-
-
 class Host(object):
 
     def __init__(self, node_id, address, node_type):
@@ -42,18 +27,29 @@ class Host(object):
 
 class Command(object):
 
-    def __init__(self, action, position, new_value=None, old_value=None, serial=None):
+    def __init__(self, client_address, serial, action, position, new_value=None, old_value=None):
+        self.client_address = client_address
+        self.serial = serial
         self.action = action
         self.position = position
         self.new_value = new_value
         self.old_value = old_value
-        self.serial = serial
 
     def __str__(self):
         if self.action == "GET":
             return "(" + self.action + ", " + str(self.position) + ")"
         else:
             return "(" + self.action + ", " + str(self.position) + ", " + str(self.new_value) + ")"
+
+    def serialize(self):
+        return json.dumps(self, default=lambda o: o.__dict__, indent=4)
+
+
+class Log(object):
+
+    def __init__(self, command, term):
+        self.command = command
+        self.term = term
 
     def serialize(self):
         return json.dumps(self, default=lambda o: o.__dict__, indent=4)

@@ -1,23 +1,45 @@
 import socket
+import sys
+import time
+
 from utils import *
-from message import *
+import message as msg
 from tkinter import *
 from random import choice
+from datetime import datetime
 
-server_leader = None
+"""
+Clients of Raft send all of their requests to the leader.
+When a client first starts up, it connects to a randomly chosen server. If the client’s first choice is not the leader,
+that server will reject the client’s request and supply information about the most recent leader it has heard from
+(AppendEntries requests include the network address of the leader). If the leader crashes, client requests will time
+out; clients then try again with randomly-chosen servers.
+"""
+RESPONSE_TIMEOUT = 5
+
+client_address = None
+server_address = None
 server_list = []
 
-def read_file(json_file):
-    file = open(json_file, "r")
-    content = file.read()
-    data = json.loads(content)
 
-    server_list = [Host(**node) for node in data["server_list"]]
+def generate_serial(address):
+    """ Generates a unique serial number to assign to a command. """
+    return str(address) + "-" + str(datetime.now())
 
-    return server_list
+
+def get_servers(file_name):
+    with open(file_name, "r") as file:
+        data = json.loads(file.read())
+
+        servers = [Host(**node) for node in data["server_list"]]
+
+        file.close()
+
+    return servers
 
 
 def check_data(op, position, value):
+    """ Checks if the given data is consistent. """
     ok_data = True
 
     if op != 'SET' and op != 'GET':
@@ -36,7 +58,9 @@ def check_data(op, position, value):
 
 
 def send_request():
-    global server_leader
+    global client_address
+    global server_address
+    global server_list
 
     op = operation.get().upper()
     pos = position.get()
@@ -47,75 +71,89 @@ def send_request():
     if not check_data(op, pos, val):
         return
 
-    # Client Address
-    client_address = (udp_host.get(), 12345)
-
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(client_address)
 
-    # Create the command
-    command = Command(op, pos, new_value=(None if op == 'GET' else val))
+    # Create Command
+    serial = generate_serial(client_address)
+    new_value = (None if op == 'GET' else val)
+    command = Command(client_address, serial, op, pos, new_value)
 
-    tries = 3
-    while tries >= 0:
+    response_ok = False
+    timeout = time.time() + RESPONSE_TIMEOUT
+    while True:
 
-        if server_leader:
-            server_address = server_leader
-        else:
-            server_address = choice(server_list)
+        if not server_address:
+            server_address = choice(server_list).address
 
-        message = Message('ClientRequest', from_address=client_address, to_address=server_address, command=command)
+        message = msg.Message('ClientRequest', from_address=client_address, to_address=server_address, command=command)
 
         try:
-            # Send data
+            # Send request
             print('Sending message:')
             print(message)
             message.send(sock)
 
             # Receive response
             print('\nWaiting to receive...\n')
-            sock.settimeout(5.0)
+
+            sock.settimeout(1.0) # CONSTANTE
             data, server = sock.recvfrom(4096)
 
-            message = Message.deserialize(data.decode())
+            message = msg.Message.deserialize(data.decode())
 
             if message.msg_type == "ClientRequest-Reply":
 
+                # Receives the response to the request
                 if message.response:
                     txt.delete("1.0", END)
                     txt.insert(END, message.response + "\n")
+                    response_ok = True
                     break
                 else:
+                    # Current server is not the leader, It rejected the client’s
+                    # request and supply information about the most recent leader
                     if message.leader_address:
                         server_address = message.leader_address
-                        server_leader = message.leader_address
                     else:
-                        # no leader...
-                        continue
+                        # Current server has no leader's info
+                        # Try again with another server
+                        server_address = None
 
         except socket.timeout:
             # Timeout: no response received.
-            txt.delete("1.0", END)
-            txt.insert(END, "Error: timeout")
-            tries -= 1
+            # txt.delete("1.0", END)
+            # txt.insert(END, "Error: timeout")
+            server_address = None
 
-        except Exception as e:
-            txt.delete("1.0", END)
-            txt.insert(END, str(e) + "\n")
-            server_address = choice(server_list)
+        except socket.error as e:
+            # if e.args[0] == 10035 or e.args[0] == 10054:
+            # txt.delete("1.0", END)
+            # txt.insert(END, str(e) + "\n")
+            server_address = None
 
-    if tries == 0:
+        if time.time() >= timeout:
+            break
+
+    if not response_ok:
         txt.delete("1.0", END)
-        txt.insert(END, "Try Again")
+        txt.insert(END, "Impossible to connect, try again")
 
     print('Closing socket')
     sock.close()
 
 
 if __name__ == '__main__':
+
+    # Client Address
+    udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
+    udp_port = 12345                                       # Specified port to connect
+    client_address = (udp_host, udp_port)
+
+    # Server list
     json_file = sys.argv[1]
-    server_list = read_file(json_file)
+    server_list = get_servers(json_file)
 
     # Windows
     root = Tk()
@@ -134,64 +172,46 @@ if __name__ == '__main__':
     root.geometry("{}x{}+{}+{}".format(window_width, window_height, x_cord, y_cord))
 
     # Variables
-    udp_host = StringVar()
-    udp_port = StringVar()
     operation = StringVar()
     position = StringVar()
     value = StringVar()
 
-    udp_host.set(socket.gethostbyname(socket.gethostname()))
-    udp_port.set(3001)
     operation.set('GET')
     position.set(1)
 
-    # Host IP
-    label_host = Label(root, text="Host IP ", bd=4)
-    label_host.place(x=10, y=10)
-
-    entry_host = Entry(root, textvariable=udp_host, width=25, bd=3)
-    entry_host.place(x=90, y=10)
-
-    # Port
-    label_port = Label(root, text="Port ", bd=4)
-    label_port.place(x=10, y=40)
-
-    entry_port = Entry(root, textvariable=udp_port, width=25, bd=3)
-    entry_port.place(x=90, y=40)
-
     # Operation
     label_op = Label(root, text="Operation ", bd=4)
-    label_op.place(x=10, y=90)
+    label_op.place(x=10, y=30)
 
     entry_op = Entry(root, textvariable=operation, width=25, bd=3)
-    entry_op.place(x=90, y=90)
+    entry_op.place(x=90, y=30)
 
     label_op2 = Label(root, text="(GET/SET)", bd=4)
-    label_op2.place(x=260, y=90)
+    label_op2.place(x=260, y=30)
 
     # Position
     label_port = Label(root, text="Position ", bd=4)
-    label_port.place(x=10, y=120)
+    label_port.place(x=10, y=60)
 
     entry_port = Entry(root, textvariable=position, width=25, bd=3)
-    entry_port.place(x=90, y=120)
+    entry_port.place(x=90, y=60)
 
     label_op2 = Label(root, text="[0..5]", bd=4)
-    label_op2.place(x=260, y=120)
+    label_op2.place(x=260, y=60)
 
     # Value
     label_port = Label(root, text="Value", bd=4)
-    label_port.place(x=10, y=150)
+    label_port.place(x=10, y=90)
 
     entry_port = Entry(root, textvariable=value, width=25, bd=3)
-    entry_port.place(x=90, y=150)
+    entry_port.place(x=90, y=90)
 
     # Send Button
     button = Button(root, text="Send", command=send_request, width=15, bd=4)
-    button.place(x=110, y=200)
+    button.place(x=110, y=150)
 
     # Information
-    txt = Text(root, height=4, width=40)
-    txt.place(x=11, y=250)
+    txt = Text(root, height=8, width=40)
+    txt.place(x=11, y=200)
 
     root.mainloop()

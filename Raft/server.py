@@ -11,20 +11,17 @@ if __name__ == '__main__':
 
     # Get data from the json file
     json_file = sys.argv[1]
-    data = tuple(read_file(json_file))
+    # data = tuple(Node.get_info(json_file))
+    node_id, port, node_list = Node.get_info(json_file)
 
     # Server Address
     udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
-    udp_port = data[1]                                     # Specified port to connect
+    udp_port = port                                        # Specified port to connect
     server_address = (udp_host, udp_port)
 
     # Create a UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(server_address)
-
-    # Create Node
-    node_id = data[0]
-    node_list = data[2]
 
     server = Node(node_id, server_address, 'FOLLOWER', node_list, sock)
     print(server)

@@ -25,8 +25,8 @@ class Node(object):
 
         self.current_term = 0  # Latest term server has seen
         self.voted_for = None  # Candidate Id that received vote in current term
-        self.votes = set()     # Amount of votes received in current term
-        self.logs = []         # Log entries; each entry contains command for state machine, and term
+        self.votes = set()  # Amount of votes received in current term
+        self.logs = []  # Log entries; each entry contains command for state machine, and term
 
         # -----------------------------------------------------
         # Volatile state on all servers:
@@ -54,21 +54,25 @@ class Node(object):
     # heartbeat_timeout = 0
     # election_timeout = 0
 
-    heartbeat_time = 2     # Timeout to sent a heartbeat message (AppendEntries)
+    heartbeat_time = 2  # Timeout to sent a heartbeat message (AppendEntries)
     last_heartbeat = None  # Time of last heartbeat sent
 
     election_time = random.randint(4, 8)  # Timed out to wait for a heartbeat message
-    waiting_election = time.time()        # Time from which it's began to wait a heartbeat message
+    waiting_election = time.time()  # Time from which it's began to wait a heartbeat message
+
+    """ ----------------------------------------------------------------------------------------------------------- """
+    """ Utils ----------------------------------------------------------------------------------------------------- """
 
     def log_term(self, index):
+        """ Returns the term of the log corresponding to the assigned position (index). """
         if index < 1 or len(self.logs) < index:
             return 0
         return self.logs[index - 1].term
 
     def step_down(self, term):
-        """ if one server’s current term is smaller than the other’s, then it updates its current
+        """ If one server’s current term is smaller than the other’s, then it updates its current
         term to the larger value. If a candidate or leader discovers
-        that its term is out of date, it immediately reverts to follower state."""
+        that its term is out of date, it immediately reverts to follower state. """
 
         self.state = 'FOLLOWER'
         self.current_term = term
@@ -77,13 +81,103 @@ class Node(object):
         self.last_heartbeat = None
 
     def update_election_time(self):
-        self.election_time = random.randint(3, 8) # now + random
+        self.election_time = random.randint(3, 8)
         self.waiting_election = time.time()
 
+    @staticmethod
+    def get_info(json_file):
+
+        with open(json_file, "r") as file:
+            data = json.loads(file.read())
+
+            node_id = int(data["node_id"])
+            port = int(data["port"])
+            node_list = [Host(**node) for node in data["node_list"]]
+
+            file.close()
+
+        return node_id, port, node_list
+
+    def save_state(self):
+
+        file_name = "server_configs\persistent-{0}.json".format(self.node_id)
+
+        # with open(file_name, 'r') as file:
+        #     data = json.loads(file.read())
+        #
+        #     data['term'] = self.current_term
+        #     data['voted_for'] = self.voted_for
+        #     data['logs'] = self.logs
+        #     data['dict_data'] = self.dictionary_data
+        #     file.close()
+        #
+        # with open(file_name, 'w', encoding='utf-8') as file:
+        #     json.dump(data, file, ensure_ascii=False, indent=2)
+        #     file.close()
+
+        data = dict()
+        data['node_id'] = self.node_id
+        data['port'] = self.address[1]
+        data['node_list'] = self.node_list
+        data['term'] = self.current_term
+        data['voted_for'] = self.voted_for
+        data['logs'] = self.logs
+        data['dict_data'] = self.dictionary_data
+
+        json_data = json.dumps(data, default=lambda o: o.__dict__, indent=2)  # Make a Json string
+        json_data = json.loads(json_data)  # Make a Json object
+
+        with open(file_name, 'w', encoding='utf-8') as file:
+            json.dump(json_data, file, ensure_ascii=False, indent=2)
+            file.close()
+
+    def update_state(self):
+
+        file_name = "server_configs\persistent-{0}.json".format(self.node_id)
+
+        with open(file_name, "r") as file:
+            data = json.loads(file.read())
+
+            self.current_term = int(data['term'])
+            self.voted_for = data['voted_for']
+
+            if data['logs']:
+                for log in data['logs']:
+                    cmd = Command(**log['command'])
+                    self.logs.append(Log(cmd, log['term']))
+
+            # self.dictionary_data = data['dict_data']
+
+            file.close()
+
+    def execute_command(self, command):
+        command.old_value = self.dictionary_data[command.position]
+        self.dictionary_data[command.position] = command.new_value
+
+    def revert_command(self, command):
+        self.dictionary_data[command.position] = command.old_value
+
+    @staticmethod
+    def random_timeout():
+        """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
+        return time.time() + (random.randint(150, 300) / 1000)
+
     """ ----------------------------------------------------------------------------------------------------------- """
+    """ Leader Election ------------------------------------------------------------------------------------------- """
+
+    def election_timeout(self):
+        """ If a follower receives no communication over a period of time called the election timeout,
+        then it assumes there is no viable leader and begins an election to choose a new leader. """
+
+        if self.waiting_election is not None and (time.time() - self.waiting_election >= self.election_time):
+            print("\n>>> Election Timeout <<<")
+            self.start_election()
 
     def start_election(self):
-        """ Invoked by candidates to gather votes """
+        """ Invoked by candidates to gather votes.
+        To begin an election, a follower increments its current term and transitions to candidate state.
+        It then votes for itself and issues RequestVote RPCs in parallel
+        to each of the other servers in the cluster. """
 
         # The node increments its current term
         # and transitions to candidate state
@@ -102,25 +196,23 @@ class Node(object):
         self.update_election_time()
 
     def send_request_vote(self):
+        """ Issues RequestVote RPCs to each of the other servers in the cluster. """
 
-        last_log_index = len(self.logs)                # Index of candidate’s last log entry
+        last_log_index = len(self.logs)  # Index of candidate’s last log entry
         last_log_term = self.log_term(last_log_index)  # Term of candidate’s last log entry
 
         print("\nSending RequestVote")
         for node in self.node_list:
-
             message = Message('RequestVote', from_address=self.address, to_address=node.address, from_id=self.node_id,
                               term=self.current_term, last_log_index=last_log_index, last_log_term=last_log_term)
             # Send message...
             message.send(self.socket)
 
-    def election_timeout(self):
-        """ Timed out to wait for a heartbeat message """
-        if self.waiting_election is not None and (time.time() - self.waiting_election >= self.election_time):
-            print("\n>>> Election Timeout <<<")
-            self.start_election()
-
     def receive_request_vote(self, req):
+        """ Receives a RequestVote RPC from a candidate server.
+        Each server will vote for at most one candidate in a given term, on a first-come-first-served basis,
+        and it will deny its vote if its own log is more up-to-date than that of the candidate. """
+
         # Request: [from_id, term, last_log_index, last_log_term]
 
         granted = False  # True means candidate received vote
@@ -131,15 +223,14 @@ class Node(object):
 
         if (self.voted_for in [None, req.from_id]) and (self.current_term == req.term):
 
-            # The voter denies its vote if its own log is more up-to-date than that of the candidate.
+            # The voter denies its vote if its own log is more up-to-date than that of the candidate:
             # If the logs have last entries with different terms, then the log with the later term is more up-to-date.
             # If the logs end with the same term, then whichever log is longer is more up-to-date
             last_log_index = len(self.logs)
-            last_log_term = self.log_term(last_log_index) # (self.logs[-1].term if self.logs else 0)
+            last_log_term = self.log_term(last_log_index)
 
             if (last_log_term < req.last_log_term) or \
                     (last_log_term == req.last_log_term and last_log_index <= req.last_log_index):
-
                 granted = True
                 self.voted_for = req.from_id
 
@@ -158,6 +249,10 @@ class Node(object):
         req.reply(self.socket)
 
     def receive_request_vote_reply(self, req):
+        """ Receives a response to the RequestVote RPC previously sent.
+        A candidate wins an election if it receives votes from a majority
+        of the servers in the full cluster for the same term"""
+
         # Request: [from_id, from_term, granted]
 
         # Server's current term is out of date
@@ -176,6 +271,10 @@ class Node(object):
                     self.become_leader()
 
     def become_leader(self):
+        """ Once a candidate wins an election, it becomes leader.
+        It then sends heartbeat messages to all of the other servers
+        to establish its authority and prevent new elections. """
+
         print("\n<<< I AM THE LEADER >>>")
         self.state = "LEADER"
         self.leader_address = self.address
@@ -190,57 +289,58 @@ class Node(object):
         self.start_heartbeat()
 
     """ ----------------------------------------------------------------------------------------------------------- """
+    """ Log Replication ------------------------------------------------------------------------------------------- """
+
+    # When sending an AppendEntries RPC, the leader includes the index and term of the entry
+    # in its log that immediately precedes the new entries.
+
+    # If the follower does not find an entry in its log with the same index and term,
+    # then it refuses the new entries.
+
+    # Whenever AppendEntries returns successfully, the leader knows that the follower’s log
+    # is identical to its own log up through the new entries
+
+    # the leader must find the latest log entry where the two logs agree, delete any entries in the
+    # follower’s log after that point, and send the follower all of the leader’s entries after that point.
+    # All of these actions happen in response o the consistency check performed by AppendEntries RPCs.
+
+    # The leader maintains a nextIndex for each follower, which is the index of the next log entry
+    # the leader will send to that follower
+
+    # If a follower’s log is inconsistent with the leader’s, the AppendEntries consistency check will fail
+    # in the next AppendEntries RPC. After a rejection, the leader decrements nextIndex and retries
+    # the AppendEntries RPC. Eventually nextIndex will reach a point where the leader and follower logs match.
+    # When this happens, AppendEntries will succeed, which removes any conflicting entries in the follower’s log
+    # and appends entries from the leader’s log (if any)
+
+    # If last log index ≥ nextIndex for a follower:
+    # send AppendEntries RPC with log entries starting at nextIndex
+    #   • If successful: update nextIndex and matchIndex for
+    #   follower (§5.3)
+    #   • If AppendEntries fails because of log inconsistency:
+    #   decrement nextIndex and retry
 
     def start_heartbeat(self):
+        """ Sends AppendEntries RPCs to each of the other servers in the cluster. """
+
         print("\nSending AppendEntries")
+
         for node in self.node_list:
             self.send_append_entries(node)
 
         self.last_heartbeat = time.time()
 
     def send_append_entries(self, node):
+        """ AppendEntries RPCs are initiated by leaders
+        to replicate log entries and to provide a form of heartbeat. """
 
-        # When sending an AppendEntries RPC, the leader includes the index and term of the entry
-        # in its log that immediately precedes the new entries.
-
-        # If the follower does not find an entry in its log with the same index and term,
-        # then it refuses the new entries.
-
-        # Whenever AppendEntries returns successfully, the leader knows that the follower’s log
-        # is identical to its own log up through the new entries
-
-        # the leader must find the latest log entry where the two logs agree, delete any entries in the
-        # follower’s log after that point, and send the follower all of the leader’s entries after that point.
-        # All of these actions happen in response o the consistency check performed by AppendEntries RPCs.
-
-        # The leader maintains a nextIndex for each follower, which is the index of the next log entry
-        # the leader will send to that follower
-
-        # When a leader first comes to power, it initializes all nextIndex values
-        # to the index just after the last one in its log ???????????
-
-        # If a follower’s log is inconsistent with the leader’s, the AppendEntries consistency check will fail
-        # in the next AppendEntries RPC. After a rejection, the leader decrements nextIndex and retries
-        # the AppendEntries RPC. Eventually nextIndex will reach a point where the leader and follower logs match.
-        # When this happens, AppendEntries will succeed, which removes any conflicting entries in the follower’s log
-        # and appends entries from the leader’s log (if any)
+        # The leader maintains a nextIndex for each follower, which is the index
+        # of the next log entry the leader will send to that follower
+        prev_index = self.next_index[node.node_id] - 1  # Index of log entry immediately preceding new ones
+        prev_term = self.log_term(prev_index)  # Term of prevLogIndex entry (from the leader)
 
         # If last log index ≥ nextIndex for a follower:
         # send AppendEntries RPC with log entries starting at nextIndex
-        #   • If successful: update nextIndex and matchIndex for
-        #   follower (§5.3)
-        #   • If AppendEntries fails because of log inconsistency:
-        #   decrement nextIndex and retry (§5.3)
-
-        # ------------------------------------------------------------------------------------------------------------
-        # My Version -------------------------------------------------------------------------------------------------
-
-        # The leader maintains a nextIndex for each follower, which is the index of the next log entry
-        # the leader will send to that follower
-        prev_index = self.next_index[node.node_id] - 1  # Index of log entry immediately preceding new ones
-        prev_term = self.log_term(prev_index)           # Term of prevLogIndex entry (from the leader)
-
-        # there are entries to send
         if len(self.logs) >= self.next_index[node.node_id]:
             begin_entries = (self.next_index[node.node_id] - 1)
             entries = self.logs[begin_entries:-1]
@@ -259,14 +359,14 @@ class Node(object):
         message.send(self.socket)
 
     def receive_append_entries(self, req):
+        """ Receives a AppendEntries RPC from the leader. """
+
         # Request: [term, prev_log_index, prev_log_term, entries, commit_index]
 
-        # 1. Reply false if term < currentTerm (§5.1)
-        # 2. Reply false if log doesn’t contain an entry at prevLogIndex
-        # whose term matches prevLogTerm (§5.3)
-        # 3. If an existing entry conflicts with a new one (same index
-        # but different terms), delete the existing entry and all that
-        # follow it (§5.3)
+        # 1. Reply false if term < currentTerm
+        # 2. Reply false if log does not contain an entry at prevLogIndex whose term matches prevLogTerm.
+        # 3. If an existing entry conflicts with a new one (same index but different terms),
+        # delete the existing entry and all that follow it.
         # 4. Append any new entries not already in the log
         # 5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
 
@@ -286,7 +386,7 @@ class Node(object):
 
             prev_term = self.log_term(req.prev_index)
 
-            # Log contains an entry at prev_log_index whose term matches prev_log_term
+            # Log contains an entry at prevLogIndex whose term matches prevLogTerm
             if req.prev_index == 0 or (req.prev_index <= len(self.logs) and prev_term == req.prev_term):
                 success = True
 
@@ -294,32 +394,32 @@ class Node(object):
                 for i in range(len(req.entries)):
 
                     # Entry conflicts with a new one (same index but different terms)
-                    if self.logs[index] != req.entries[i][1]:  # comparar con el termino
+                    if self.log_term(index + 1) != req.entries[i].term:
 
                         # Delete the existing entry and all that follow it
                         while len(self.logs) > index:
-                            self.revert_command(self.logs[-1].command)
+                            self.revert_command(self.logs[-1].command)  # ???
                             self.logs.pop()
 
                         # Append any new entries not already in the log
                         self.logs[index] = (req.entries[i])
-                        # ***if not self.logs[index] or (self.logs[index].term != req.entries[i][1]):
-                        # if self.log_term[index + 1]!= req.entries[i][1]):
 
                     index += 1
 
                 match_index = index
 
-                # If leaderCommit > commitIndex, set commitIndex =
+                # If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
                 if req.commit_index > self.commit_index:
                     self.commit_index = min(req.commit_index, len(self.logs))
 
-                # If commitIndex > lastApplied: increment lastApplied, apply
-                # log[lastApplied] to state machine (§5.3)
+                # --------------------------------------------------------------------------------------------
+                # If commitIndex > lastApplied: increment lastApplied,
+                # apply log[lastApplied] to state machine
                 while self.commit_index > self.last_applied:
                     self.last_applied += 1
                     cmd = self.logs[self.last_applied]
                     self.execute_command(cmd)
+                # --------------------------------------------------------------------------------------------
 
         # ----------------------------------------
         # Send a reply for 'AppendEntries' request
@@ -333,6 +433,8 @@ class Node(object):
         req.reply(self.socket)
 
     def receive_append_entries_reply(self, req):
+        """ The leader receives a response to the AppendEntries RPC previously sent. """
+
         # Request: [term, success, match_index]
 
         # Server's current term is out of date
@@ -340,13 +442,17 @@ class Node(object):
             self.step_down(req.term)
 
         if self.state == "LEADER" and self.current_term == req.term:
+
+            # The leader and follower logs match
             if req.success:
-                # Update next_index and match_index for follower
+
+                # Update nextIndex and matchIndex for follower
                 self.match_index[req.from_id] = req.match_index  # max(self.match_index[req.from_id], req.match_index)
                 self.next_index[req.from_id] = req.match_index + 1
 
-                #  If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N,
-                # and log[N].term == currentTerm: set commitIndex = N (§5.3, §5.4).
+                # --------------------------------------------------------------------------------------------
+                # If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N,
+                # and log[N].term == currentTerm: set commitIndex = N
                 match_list = [self.match_index[i] for i in self.match_index]
                 match_list.append(len(self.logs))
                 match_list.sort(reverse=True)
@@ -354,60 +460,65 @@ class Node(object):
                 if self.state == "LEADER" and self.log_term(n) == self.current_term:
                     self.commit_index = n
 
-                # If commitIndex > lastApplied: increment lastApplied, apply
-                # log[lastApplied] to state machine (§5.3)
+                # If commitIndex > lastApplied: increment lastApplied,
+                # apply log[lastApplied] to state machine
                 while self.commit_index > self.last_applied:
                     self.last_applied += 1
                     cmd = self.logs[self.last_applied]
                     self.execute_command(cmd)
 
+                    #
+                    message = Message("ClientRequest-Reply", from_address=self.address, to_address=cmd.client_address)
+                    message.send(self.socket)
+                # --------------------------------------------------------------------------------------------
+
             else:
                 # Follower’s log is inconsistent with the leader’s,
-                # Decrements next_index and retries the AppendEntries RPC.
+                # decrements next_index and retries the AppendEntries RPC
                 self.next_index[req.from_id] = max(1, self.next_index[req.from_id] - 1)
 
     def heartbeat_timeout(self):
         """ It's time to send a heartbeat """
-
         if self.state == "LEADER":
             if self.last_heartbeat and (time.time() - self.last_heartbeat >= self.heartbeat_time):
                 self.start_heartbeat()
 
     """ ----------------------------------------------------------------------------------------------------------- """
+    """ Client Interaction ---------------------------------------------------------------------------------------- """
 
     def receive_client_request(self, request):
         """ Receives a request from a client.
-        If the node is not the leader, forwards the message to the current leader"""
+        The leader accepts log entries from clients, replicates them on other servers,
+        and tells servers when it is safe to apply log entries to their state machines.
+        • If the server is not the leader, it rejects the client’s request
+        and supply information about the most recent leader it has heard.
+        • If it receives a command whose serial number has already been executed,
+        it responds immediately without re-executing the request.
+        • Read-only operations can be handled without writing anything into the log
+        (exchange heartbeat messages with a majority of the cluster before responding to read-only requests). """
 
         cmd = request.command
 
         if self.state == "LEADER":
-
-            # encolar...............
 
             if cmd.action == "GET":
                 # Reply with dictionary content
                 request.response = self.dictionary_data[cmd.position]
                 request.reply(self.socket)
             else:
-                # Check if the request has already been sent before
+                # Check if the request has already been executed before
                 for log in reversed(self.logs):
                     if log.command.serial == cmd.serial:
                         request.response = "Success!"
                         request.reply(self.socket)
                         return
 
-                self.logs.append(Log(cmd, self.current_term))  # Como le aviso al cliente...?
+                # Append the new command to the log,
+                # and reply once it has been applied to the state machine
+                self.logs.append(Log(cmd, self.current_term))
 
         else:
-            # Reply with the leader's direction
+            # Reply with the leader's address
             request.leader_address = self.leader_address
             request.reply(self.socket)
-
-    def execute_command(self, command):
-        command.old_value = self.dictionary_data[command.position]
-        self.dictionary_data[command.position] = command.new_value
-
-    def revert_command(self, command):
-        self.dictionary_data[command.position] = command.old_value
 
