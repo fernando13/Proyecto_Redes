@@ -1,22 +1,36 @@
-from node import *
-import random
-import utils as msg
+import json
 import sys
 import socket
+from node import Node
+from message import Message
+from utils import Host
 
-# python server.py server_configs\server-1.json
+# python server.py configs\server-1.json
 # sys.argv[1] -->  file.json
+
+
+def get_server_info(file_name):
+    with open(file_name, "r") as file:
+        data = json.loads(file.read())
+
+        node_id = int(data["node_id"])
+        port = int(data["port"])
+        node_list = [Host(**node) for node in data["node_list"]]
+
+        file.close()
+
+    return node_id, port, node_list
+
 
 if __name__ == '__main__':
 
     # Get data from the json file
     json_file = sys.argv[1]
-    # data = tuple(Node.get_info(json_file))
-    node_id, port, node_list = Node.get_info(json_file)
+    node_id, port, node_list = get_server_info(json_file)
 
     # Server Address
     udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
-    udp_port = port                                        # Specified port to connect
+    udp_port = port  # Specified port to connect
     server_address = (udp_host, udp_port)
 
     # Create a UDP socket
@@ -39,10 +53,10 @@ if __name__ == '__main__':
             """-------------------------------------------------------"""
 
             # It's time to send a heartbeat message
-            server.heartbeat_timeout()
+            server.heartbeat_timeout_due()
 
             # Timed out to wait for a heartbeat message
-            server.election_timeout()
+            server.election_timeout_due()
 
             if message.msg_type == "AppendEntries":
                 if message.direction == "request":
@@ -67,15 +81,13 @@ if __name__ == '__main__':
             if e.args[0] == 10035 or e.args[0] == 10054:
 
                 # It's time to send a heartbeat message
-                server.heartbeat_timeout()
+                server.heartbeat_timeout_due()
 
                 # Timed out to wait for a heartbeat message
-                server.election_timeout()
+                server.election_timeout_due()
 
             else:
                 print("Error :", e)
 
         except Exception as e:
             print("Error :", e)
-
-

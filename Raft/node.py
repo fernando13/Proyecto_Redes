@@ -1,9 +1,26 @@
-from utils import *
-from message import *
 import time
-from tabulate import tabulate
 import random
+from message import *
 from math import floor
+from tabulate import tabulate
+
+# HEARTBEAT_TIMEOUT = 0.1
+#
+#
+# def random_timeout():
+#     """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
+#     return time.time() + (random.randint(150, 300) / 1000)
+
+# For Test ------------------------------------------------------------------------
+HEARTBEAT_TIMEOUT = 2
+
+
+def random_timeout():
+    """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
+    return time.time() + (random.randint(3, 5))
+
+
+# ---------------------------------------------------------------------------------
 
 
 class Node(object):
@@ -13,13 +30,19 @@ class Node(object):
         self.address = address  # (UDP_IP, UDP_PORT)
         self.state = state  # LEADER/FOLLOWER/CANDIDATE
         self.quorum_size = floor((len(node_list) + 1) / 2)
-        self.node_list = node_list  # List of all nodes in the system --> (node_id, address, node_type)
+        self.node_list = node_list  # List of all nodes in the system --> (node_id, address)
         self.socket = socket
         self.dictionary_data = {1: "okote", 2: "waldo", 3: "pijui", 4: "hector"}
 
         self.leader_address = None  # Address of the current leader
 
-        # -----------------------------------------------------
+        # Timeout to wait for a 'AppendEntries' message
+        self.election_timeout = random_timeout()
+
+        # Timeout to sent a 'AppendEntries' message
+        self.heartbeat_timeout = None
+
+        # -------------------------------------------------------------------------------------
         # Persistent state on all servers:
         # (Updated on stable storage before responding to RPCs)
 
@@ -28,13 +51,13 @@ class Node(object):
         self.votes = set()  # Amount of votes received in current term
         self.logs = []  # Log entries; each entry contains command for state machine, and term
 
-        # -----------------------------------------------------
+        # -------------------------------------------------------------------------------------
         # Volatile state on all servers:
 
         self.commit_index = 0  # Index of highest log entry known to be committed
         self.last_applied = 0  # Index of highest log entry applied to state machine
 
-        # -----------------------------------------------------
+        # -------------------------------------------------------------------------------------
         # Volatile state on leaders:
 
         # For each server, index of the next log entry to send to that server
@@ -48,17 +71,6 @@ class Node(object):
                          'Address': [str(self.address)],
                          'State': [str(self.state)]},
                         headers="keys", tablefmt='fancy_grid', colalign=("center", "center", "center"))
-
-    """ ----------------------------------------------------------------------------------------------------------- """
-
-    # heartbeat_timeout = 0
-    # election_timeout = 0
-
-    heartbeat_time = 2  # Timeout to sent a heartbeat message (AppendEntries)
-    last_heartbeat = None  # Time of last heartbeat sent
-
-    election_time = random.randint(4, 8)  # Timed out to wait for a heartbeat message
-    waiting_election = time.time()  # Time from which it's began to wait a heartbeat message
 
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Utils ----------------------------------------------------------------------------------------------------- """
@@ -78,42 +90,12 @@ class Node(object):
         self.current_term = term
         self.voted_for = None
         self.votes = set()
-        self.last_heartbeat = None
-
-    def update_election_time(self):
-        self.election_time = random.randint(3, 8)
-        self.waiting_election = time.time()
-
-    @staticmethod
-    def get_info(json_file):
-
-        with open(json_file, "r") as file:
-            data = json.loads(file.read())
-
-            node_id = int(data["node_id"])
-            port = int(data["port"])
-            node_list = [Host(**node) for node in data["node_list"]]
-
-            file.close()
-
-        return node_id, port, node_list
+        # self.last_heartbeat = None
+        self.heartbeat_timeout = None
 
     def save_state(self):
 
-        file_name = "server_configs\persistent-{0}.json".format(self.node_id)
-
-        # with open(file_name, 'r') as file:
-        #     data = json.loads(file.read())
-        #
-        #     data['term'] = self.current_term
-        #     data['voted_for'] = self.voted_for
-        #     data['logs'] = self.logs
-        #     data['dict_data'] = self.dictionary_data
-        #     file.close()
-        #
-        # with open(file_name, 'w', encoding='utf-8') as file:
-        #     json.dump(data, file, ensure_ascii=False, indent=2)
-        #     file.close()
+        file_name = "configs\server-{0}.json".format(self.node_id)
 
         data = dict()
         data['node_id'] = self.node_id
@@ -124,8 +106,10 @@ class Node(object):
         data['logs'] = self.logs
         data['dict_data'] = self.dictionary_data
 
-        json_data = json.dumps(data, default=lambda o: o.__dict__, indent=2)  # Make a Json string
-        json_data = json.loads(json_data)  # Make a Json object
+        # 1.Make a Json string
+        # 2.Make a Json object
+        json_data = json.dumps(data, default=lambda o: o.__dict__, indent=2)
+        json_data = json.loads(json_data)
 
         with open(file_name, 'w', encoding='utf-8') as file:
             json.dump(json_data, file, ensure_ascii=False, indent=2)
@@ -133,43 +117,40 @@ class Node(object):
 
     def update_state(self):
 
-        file_name = "server_configs\persistent-{0}.json".format(self.node_id)
+        file_name = "configs'\server-{0}.json".format(self.node_id)
 
         with open(file_name, "r") as file:
             data = json.loads(file.read())
 
             self.current_term = int(data['term'])
             self.voted_for = data['voted_for']
+            self.dictionary_data = data['dict_data']
 
             if data['logs']:
                 for log in data['logs']:
                     cmd = Command(**log['command'])
                     self.logs.append(Log(cmd, log['term']))
 
-            # self.dictionary_data = data['dict_data']
-
             file.close()
 
     def execute_command(self, command):
-        command.old_value = self.dictionary_data[command.position]
-        self.dictionary_data[command.position] = command.new_value
+        """ Applies the current command in the state machine, if it has not already been applied. """
+        if not command.executed:
+            command.old_value = self.dictionary_data[command.position]
+            self.dictionary_data[command.position] = command.new_value
 
     def revert_command(self, command):
-        self.dictionary_data[command.position] = command.old_value
-
-    @staticmethod
-    def random_timeout():
-        """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
-        return time.time() + (random.randint(150, 300) / 1000)
+        """ Reverts the current command in the state machine, if it has already been applied. """
+        if command.executed:
+            self.dictionary_data[command.position] = command.old_value
 
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Leader Election ------------------------------------------------------------------------------------------- """
 
-    def election_timeout(self):
+    def election_timeout_due(self):
         """ If a follower receives no communication over a period of time called the election timeout,
         then it assumes there is no viable leader and begins an election to choose a new leader. """
-
-        if self.waiting_election is not None and (time.time() - self.waiting_election >= self.election_time):
+        if self.election_timeout and (time.time() >= self.election_timeout):
             print("\n>>> Election Timeout <<<")
             self.start_election()
 
@@ -193,7 +174,7 @@ class Node(object):
         self.send_request_vote()
 
         # Election timeout is updated
-        self.update_election_time()
+        self.election_timeout = random_timeout()
 
     def send_request_vote(self):
         """ Issues RequestVote RPCs to each of the other servers in the cluster. """
@@ -235,7 +216,7 @@ class Node(object):
                 self.voted_for = req.from_id
 
                 # Election timeout is updated
-                self.update_election_time()
+                self.election_timeout = random_timeout()
 
         # --------------------------------------
         # Send a reply for 'RequestVote' request
@@ -283,7 +264,7 @@ class Node(object):
         self.next_index = {node.node_id: (len(self.logs) + 1) for node in self.node_list}
 
         # Stops waiting for election timeout
-        self.waiting_election = None
+        self.election_timeout = None
 
         # Begins to send heartbeats
         self.start_heartbeat()
@@ -320,15 +301,21 @@ class Node(object):
     #   • If AppendEntries fails because of log inconsistency:
     #   decrement nextIndex and retry
 
+    def heartbeat_timeout_due(self):
+        """ It's time to send a heartbeat """
+        if self.state == "LEADER":
+            if self.heartbeat_timeout and (time.time() >= self.heartbeat_timeout):
+                self.start_heartbeat()
+
     def start_heartbeat(self):
         """ Sends AppendEntries RPCs to each of the other servers in the cluster. """
 
-        print("\nSending AppendEntries")
+        print("\nSending AppendEntries\n")
 
         for node in self.node_list:
             self.send_append_entries(node)
 
-        self.last_heartbeat = time.time()
+        self.heartbeat_timeout = time.time() + HEARTBEAT_TIMEOUT
 
     def send_append_entries(self, node):
         """ AppendEntries RPCs are initiated by leaders
@@ -351,10 +338,16 @@ class Node(object):
 
         # ------------------------------------------------------------------------------------------------------------
 
-        message = Message('AppendEntries', from_address=self.address, to_address=node.address,
-                          from_id=self.node_id, term=self.current_term,
-                          prev_index=prev_index, prev_term=prev_term,
-                          entries=entries, commit_index=commit_index)
+        message = Message('AppendEntries',
+                          from_address=self.address,
+                          to_address=node.address,
+                          leader_address=self.address,
+                          from_id=self.node_id,
+                          term=self.current_term,
+                          prev_index=prev_index,
+                          prev_term=prev_term,
+                          entries=entries,
+                          commit_index=commit_index)
         # Send message...
         message.send(self.socket)
 
@@ -382,7 +375,7 @@ class Node(object):
             self.leader_address = tuple(req.from_address)
 
             # Election timeout is updated
-            self.update_election_time()
+            self.election_timeout = random_timeout()
 
             prev_term = self.log_term(req.prev_index)
 
@@ -398,7 +391,7 @@ class Node(object):
 
                         # Delete the existing entry and all that follow it
                         while len(self.logs) > index:
-                            self.revert_command(self.logs[-1].command)  # ???
+                            self.revert_command(self.logs[-1].command)
                             self.logs.pop()
 
                         # Append any new entries not already in the log
@@ -412,18 +405,17 @@ class Node(object):
                 if req.commit_index > self.commit_index:
                     self.commit_index = min(req.commit_index, len(self.logs))
 
-                # --------------------------------------------------------------------------------------------
-                # If commitIndex > lastApplied: increment lastApplied,
-                # apply log[lastApplied] to state machine
+                # If commitIndex > lastApplied:
+                # increment lastApplied, apply log[lastApplied] to state machine
                 while self.commit_index > self.last_applied:
                     self.last_applied += 1
                     cmd = self.logs[self.last_applied]
                     self.execute_command(cmd)
-                # --------------------------------------------------------------------------------------------
 
         # ----------------------------------------
         # Send a reply for 'AppendEntries' request
         # Arguments:
+        req.from_id = self.node_id
         req.term = self.current_term
         req.success = success
         req.match_index = match_index
@@ -450,9 +442,8 @@ class Node(object):
                 self.match_index[req.from_id] = req.match_index  # max(self.match_index[req.from_id], req.match_index)
                 self.next_index[req.from_id] = req.match_index + 1
 
-                # --------------------------------------------------------------------------------------------
-                # If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N,
-                # and log[N].term == currentTerm: set commitIndex = N
+                # If there exists an N such that N > commitIndex,
+                # a majority of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N
                 match_list = [self.match_index[i] for i in self.match_index]
                 match_list.append(len(self.logs))
                 match_list.sort(reverse=True)
@@ -460,28 +451,21 @@ class Node(object):
                 if self.state == "LEADER" and self.log_term(n) == self.current_term:
                     self.commit_index = n
 
-                # If commitIndex > lastApplied: increment lastApplied,
-                # apply log[lastApplied] to state machine
+                # If commitIndex > lastApplied:
+                # increment lastApplied, apply log[lastApplied] to state machine
                 while self.commit_index > self.last_applied:
                     self.last_applied += 1
                     cmd = self.logs[self.last_applied]
                     self.execute_command(cmd)
 
-                    #
+                    # Responds to the client
                     message = Message("ClientRequest-Reply", from_address=self.address, to_address=cmd.client_address)
                     message.send(self.socket)
-                # --------------------------------------------------------------------------------------------
 
             else:
                 # Follower’s log is inconsistent with the leader’s,
                 # decrements next_index and retries the AppendEntries RPC
                 self.next_index[req.from_id] = max(1, self.next_index[req.from_id] - 1)
-
-    def heartbeat_timeout(self):
-        """ It's time to send a heartbeat """
-        if self.state == "LEADER":
-            if self.last_heartbeat and (time.time() - self.last_heartbeat >= self.heartbeat_time):
-                self.start_heartbeat()
 
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Client Interaction ---------------------------------------------------------------------------------------- """
@@ -503,6 +487,7 @@ class Node(object):
 
             if cmd.action == "GET":
                 # Reply with dictionary content
+                # self.start_heartbeat()
                 request.response = self.dictionary_data[cmd.position]
                 request.reply(self.socket)
             else:
@@ -521,4 +506,3 @@ class Node(object):
             # Reply with the leader's address
             request.leader_address = self.leader_address
             request.reply(self.socket)
-

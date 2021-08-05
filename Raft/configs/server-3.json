@@ -1,0 +1,38 @@
+{
+  "node_id": 3,
+  "port": 3003,
+  "node_list": [
+    {
+      "node_id": 1,
+      "address": [
+        "192.168.0.54",
+        3001
+      ]
+    },
+    {
+      "node_id": 2,
+      "address": [
+        "192.168.0.54",
+        3002
+      ]
+    },
+    {
+      "node_id": 4,
+      "address": [
+        "192.168.0.54",
+        3004
+      ]
+    },
+    {
+      "node_id": 5,
+      "address": [
+        "192.168.0.54",
+        3005
+      ]
+    }
+  ],
+  "term": 0,
+  "voted_for": null,
+  "logs": null,
+  "dict_data": null
+}

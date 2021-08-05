@@ -1,9 +1,8 @@
 import socket
 import sys
 import time
-
-from utils import *
 import message as msg
+from utils import *
 from tkinter import *
 from random import choice
 from datetime import datetime
@@ -15,6 +14,7 @@ that server will reject the client’s request and supply information about the 
 (AppendEntries requests include the network address of the leader). If the leader crashes, client requests will time
 out; clients then try again with randomly-chosen servers.
 """
+
 RESPONSE_TIMEOUT = 5
 
 client_address = None
@@ -27,30 +27,34 @@ def generate_serial(address):
     return str(address) + "-" + str(datetime.now())
 
 
-def get_servers(file_name):
+def get_client_data(file_name):
     with open(file_name, "r") as file:
         data = json.loads(file.read())
+
+        # Client Address
+        udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
+        address = tuple((udp_host, data["port"]))
 
         servers = [Host(**node) for node in data["server_list"]]
 
         file.close()
 
-    return servers
+    return address, servers
 
 
-def check_data(op, position, value):
+def check_data(action, index, new_value):
     """ Checks if the given data is consistent. """
     ok_data = True
 
-    if op != 'SET' and op != 'GET':
+    if action != 'SET' and action != 'GET':
         txt.insert(END, "Wrong command!\n")
         ok_data = False
 
-    if position == "" or int(position) not in range(6):
+    if position == "" or int(index) not in range(6):
         txt.insert(END, "Position out of range!\n")
         ok_data = False
 
-    if op == 'SET' and value == "":
+    if action == 'SET' and new_value == "":
         txt.insert(END, "You must enter a value!\n")
         ok_data = False
 
@@ -98,7 +102,7 @@ def send_request():
             # Receive response
             print('\nWaiting to receive...\n')
 
-            sock.settimeout(1.0) # CONSTANTE
+            sock.settimeout(1.0)
             data, server = sock.recvfrom(4096)
 
             message = msg.Message.deserialize(data.decode())
@@ -146,14 +150,9 @@ def send_request():
 
 if __name__ == '__main__':
 
-    # Client Address
-    udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
-    udp_port = 12345                                       # Specified port to connect
-    client_address = (udp_host, udp_port)
-
-    # Server list
+    # Client Data
     json_file = sys.argv[1]
-    server_list = get_servers(json_file)
+    client_address, server_list = get_client_data(json_file)
 
     # Windows
     root = Tk()

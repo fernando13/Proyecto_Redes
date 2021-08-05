@@ -1,6 +1,4 @@
-import collections
 import json
-from tabulate import tabulate
 
 
 def deserialize(object_type, json_data):
@@ -9,16 +7,14 @@ def deserialize(object_type, json_data):
 
 class Host(object):
 
-    def __init__(self, node_id, address, node_type):
+    def __init__(self, node_id, address):
         self.node_id = node_id
         self.address = tuple(address)
-        self.node_type = node_type
 
     def __str__(self):
         string = "\n"
         string += "Node Id: " + str(self.node_id) + "\n"
-        string += "Address: " + str(self.address) + "\n"
-        string += "Type: " + self.node_type
+        string += "Address: " + str(self.address)
         return string
 
     def serialize(self):
@@ -27,13 +23,14 @@ class Host(object):
 
 class Command(object):
 
-    def __init__(self, client_address, serial, action, position, new_value=None, old_value=None):
+    def __init__(self, client_address, serial, action, position, new_value=None, old_value=None, executed=False):
         self.client_address = client_address
         self.serial = serial
         self.action = action
         self.position = position
         self.new_value = new_value
         self.old_value = old_value
+        self.executed = executed
 
     def __str__(self):
         if self.action == "GET":

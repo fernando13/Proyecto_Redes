@@ -13,6 +13,7 @@ if __name__ == '__main__':
 		server['address'] = (address_ip, 3000 + j)
 		servers.append(server)
 
+	# Create configurations for servers
 	for i in range(1, 6):
 			
 		config = dict()
@@ -26,19 +27,30 @@ if __name__ == '__main__':
 		
 		config['term'] = 0
 		config['voted_for'] = None
-		config['log'] = None
+		config['logs'] = None
 		config['dict_data'] = None
 		
 		# Serializing json 
-		json_config = json.dumps(config, indent = 4)
+		json_config = json.dumps(config, indent=2)
 		
 		# Writing to file
 		file_name = "configs/server-{0}.json".format(i)
 		with open(file_name, "w") as file:
 			file.write(json_config)
-	
-	
 
-		
+	# Create configurations for clients
+	for i in range(1, 4):
+
+		config = dict()
+		config['port'] = 4000 + i
+		config['server_list'] = servers
+
+		# Serializing json
+		json_config = json.dumps(config, indent=2)
+
+		# Writing to file
+		file_name = "configs/client-{0}.json".format(i)
+		with open(file_name, "w") as file:
+			file.write(json_config)
 	
 	

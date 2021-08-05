@@ -3,11 +3,11 @@ from utils import *
 from node import *
 import sys
 import socket
-# {"term": 0, "voted_for": null, "logs": []}
+
 if __name__ == '__main__':
 
     # Get data from the json file
-    json_file = "server_configs\server-1.json"
+    json_file = "configs\server-1.json"
     node_id, port, node_list = Node.get_info(json_file)
 
     # Server Address
