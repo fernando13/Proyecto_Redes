@@ -16,6 +16,7 @@ out; clients then try again with randomly-chosen servers.
 """
 
 RESPONSE_TIMEOUT = 5
+RESPONSE_SERVER_TIMEOUT = 1.0
 
 client_address = None
 server_address = None
@@ -50,7 +51,7 @@ def check_data(action, index, new_value):
         txt.insert(END, "Wrong command!\n")
         ok_data = False
 
-    if position == "" or int(index) not in range(6):
+    if not index or int(index) not in [1, 2, 3, 4, 5]:
         txt.insert(END, "Position out of range!\n")
         ok_data = False
 
@@ -96,45 +97,48 @@ def send_request():
         try:
             # Send request
             print('Sending message:')
-            print(message)
+            print(' -> ', server_address)
             message.send(sock)
 
             # Receive response
-            print('\nWaiting to receive...\n')
+            # print('\nWaiting to receive...\n')
 
-            sock.settimeout(1.0)
+            sock.settimeout(RESPONSE_SERVER_TIMEOUT)
             data, server = sock.recvfrom(4096)
 
             message = msg.Message.deserialize(data.decode())
+            print(message)
 
-            if message.msg_type == "ClientRequest-Reply":
-
-                # Receives the response to the request
-                if message.response:
-                    txt.delete("1.0", END)
-                    txt.insert(END, message.response + "\n")
-                    response_ok = True
-                    break
-                else:
-                    # Current server is not the leader, It rejected the client’s
-                    # request and supply information about the most recent leader
-                    if message.leader_address:
-                        server_address = message.leader_address
+            if message.msg_type == "ClientRequest":
+                if message.direction == "reply":
+                    # Receives the response to the request
+                    if message.response:
+                        txt.delete("1.0", END)
+                        txt.insert(END, message.response + "\n")
+                        response_ok = True
+                        break
                     else:
-                        # Current server has no leader's info
-                        # Try again with another server
-                        server_address = None
+                        # Current server is not the leader, It rejected the client’s
+                        # request and supply information about the most recent leader
+                        if message.leader_address:
+                            server_address = tuple(message.leader_address)
+                        else:
+                            # Current server has no leader's info
+                            # Try again with another server
+                            server_address = None
 
-        except socket.timeout:
+        except socket.timeout as e:
             # Timeout: no response received.
             # txt.delete("1.0", END)
             # txt.insert(END, "Error: timeout")
+            print(e)
             server_address = None
 
         except socket.error as e:
             # if e.args[0] == 10035 or e.args[0] == 10054:
             # txt.delete("1.0", END)
             # txt.insert(END, str(e) + "\n")
+            print(e)
             server_address = None
 
         if time.time() >= timeout:
@@ -195,7 +199,7 @@ if __name__ == '__main__':
     entry_port = Entry(root, textvariable=position, width=25, bd=3)
     entry_port.place(x=90, y=60)
 
-    label_op2 = Label(root, text="[0..5]", bd=4)
+    label_op2 = Label(root, text="[1..5]", bd=4)
     label_op2.place(x=260, y=60)
 
     # Value

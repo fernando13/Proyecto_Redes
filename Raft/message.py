@@ -3,6 +3,10 @@ from tabulate import tabulate
 
 
 class Message(object):
+    """ The Message class represents a message which will be used
+    for communication between the different servers of the cluster and the clients.
+    These messages contain all the necessary components to be able to carry out a
+    correct communication in the implementation of the raft consensus algorithm. """
 
     def __init__(self, msg_type, from_address, to_address, direction=None, from_id=None, term=None, command=None,
                  response=None, leader_address=None, last_log_index=None, last_log_term=None, granted=None,
@@ -111,9 +115,10 @@ class Message(object):
             else:
                 return tabulate({'Type': [self.msg_type + "-Reply"],
                                  'Node': [str(self.from_id)],
-                                 'Response': [str(self.response)]},
+                                 'Response': [str(self.response)],
+                                 'Leader': [str(self.leader_address)]},
                                 headers="keys", tablefmt='fancy_grid',
-                                colalign=("center", "center", "center"))
+                                colalign=("center", "center", "center", "center"))
 
 
 # if __name__ == '__main__':

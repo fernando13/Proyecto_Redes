@@ -5,6 +5,7 @@ import json
 
 if __name__ == '__main__':
 
+	# List of all servers
 	address_ip = socket.gethostbyname(socket.gethostname())
 	servers = []
 	for j in range(1, 6):
@@ -12,6 +13,9 @@ if __name__ == '__main__':
 		server['node_id'] = j
 		server['address'] = (address_ip, 3000 + j)
 		servers.append(server)
+
+	# Initialization of the shared resource
+	dict_data = {1: "Blue", 2: "Yellow", 3: "Red", 4: "Green", 5: "White"}
 
 	# Create configurations for servers
 	for i in range(1, 6):
@@ -28,7 +32,7 @@ if __name__ == '__main__':
 		config['term'] = 0
 		config['voted_for'] = None
 		config['logs'] = None
-		config['dict_data'] = None
+		config['dict_data'] = dict_data
 		
 		# Serializing json 
 		json_config = json.dumps(config, indent=2)
@@ -52,5 +56,4 @@ if __name__ == '__main__':
 		file_name = "configs/client-{0}.json".format(i)
 		with open(file_name, "w") as file:
 			file.write(json_config)
-	
-	
+

@@ -8,7 +8,7 @@ if __name__ == '__main__':
 
     # Get data from the json file
     json_file = "configs\server-1.json"
-    node_id, port, node_list = Node.get_info(json_file)
+    node_id, port, node_list = get_server_info(json_file)
 
     # Server Address
     udp_host = socket.gethostbyname(socket.gethostname())  # Host IP
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     sock.bind(server_address)
 
     server = Node(node_id, server_address, 'FOLLOWER', node_list, sock)
-    # server.update_state()
+    server.update_state()
 
     print(server)
     print("Current term: ", server.current_term)

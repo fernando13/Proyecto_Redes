@@ -1,11 +1,14 @@
 import json
 
 
-def deserialize(object_type, json_data):
-    return object_type(**json.loads(json_data))
+# def deserialize(object_type, json_data):
+#     return object_type(**json.loads(json_data))
 
 
 class Host(object):
+    """ A Host is the minimum representation of a node,
+    and they are used to facilitate communication with the cluster servers.
+    These only contain the id of the node and its address. """
 
     def __init__(self, node_id, address):
         self.node_id = node_id
@@ -22,6 +25,17 @@ class Host(object):
 
 
 class Command(object):
+    """
+    A simple command sent as a request by a client to a server for it to execute in its state machine.
+    A command contains:
+        • client_address: The address of the client that created it.
+        • serial: A unique serial number to identify it.
+        • action: The action to be executed (GET/SET).
+        • position: The position on which the action will take effect.
+        • new_value: The value to be applied (in case the action is 'SET').
+        • old_value: The value that the machine contains before executing this command.
+        • executed: A field that identifies if the command has already been executed.
+    """
 
     def __init__(self, client_address, serial, action, position, new_value=None, old_value=None, executed=False):
         self.client_address = client_address
@@ -43,6 +57,9 @@ class Command(object):
 
 
 class Log(object):
+    """ A a log is a field belonging to a server's log record and they are used
+    in the process of log replication between all the servers in the cluster.
+    These contain a command sent by a client and a term that identifies the moment the log was added. """
 
     def __init__(self, command, term):
         self.command = command

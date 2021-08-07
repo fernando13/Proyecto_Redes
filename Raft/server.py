@@ -1,9 +1,8 @@
-import json
 import sys
 import socket
 from node import Node
 from message import Message
-from utils import Host
+from utils import *
 
 # python server.py configs\server-1.json
 # sys.argv[1] -->  file.json
@@ -38,6 +37,7 @@ if __name__ == '__main__':
     sock.bind(server_address)
 
     server = Node(node_id, server_address, 'FOLLOWER', node_list, sock)
+    server.update_state()
     print(server)
 
     server.socket.setblocking(False)

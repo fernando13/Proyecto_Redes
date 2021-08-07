@@ -24,15 +24,18 @@ def random_timeout():
 
 
 class Node(object):
+    """ The Node class represents a server with all the necessary
+    components for the implementation of the raft consensus algorithm. """
 
     def __init__(self, node_id, address, state, node_list, socket):
         self.node_id = node_id
-        self.address = address  # (UDP_IP, UDP_PORT)
-        self.state = state  # LEADER/FOLLOWER/CANDIDATE
-        self.quorum_size = floor((len(node_list) + 1) / 2)
-        self.node_list = node_list  # List of all nodes in the system --> (node_id, address)
+        self.address = address  # (udp_ip, udp_port)
+        self.state = state      # LEADER/FOLLOWER/CANDIDATE
+        self.node_list = node_list  # List of all servers in the system [(node_id, address)]
         self.socket = socket
-        self.dictionary_data = {1: "okote", 2: "waldo", 3: "pijui", 4: "hector"}
+        self.leader_address = None  # Address of the current leader
+        self.quorum_size = floor((len(node_list) + 1) / 2)
+        self.dictionary_data = None
 
         self.leader_address = None  # Address of the current leader
 
@@ -49,7 +52,7 @@ class Node(object):
         self.current_term = 0  # Latest term server has seen
         self.voted_for = None  # Candidate Id that received vote in current term
         self.votes = set()  # Amount of votes received in current term
-        self.logs = []  # Log entries; each entry contains command for state machine, and term
+        self.logs = list()  # Log entries; each entry contains command for state machine, and term
 
         # -------------------------------------------------------------------------------------
         # Volatile state on all servers:
@@ -82,20 +85,61 @@ class Node(object):
         return self.logs[index - 1].term
 
     def step_down(self, term):
-        """ If one server’s current term is smaller than the other’s, then it updates its current
-        term to the larger value. If a candidate or leader discovers
+        """ If one server’s current term is smaller than the other’s,
+        then it updates its current term to the larger value. If a candidate or leader discovers
         that its term is out of date, it immediately reverts to follower state. """
 
         self.state = 'FOLLOWER'
         self.current_term = term
         self.voted_for = None
         self.votes = set()
-        # self.last_heartbeat = None
         self.heartbeat_timeout = None
 
-    def save_state(self):
+    def advance_commit_index(self):
+        """ The leader commits (advance the commitIndex) all log entries
+        that has been replicated it on a majority of the servers. """
 
-        file_name = "configs\server-{0}.json".format(self.node_id)
+        # If there exists an N such that N > commitIndex,
+        # a majority of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N
+        match_list = [self.match_index[i] for i in self.match_index]
+        match_list.append(len(self.logs))
+        match_list.sort(reverse=True)
+        n = match_list[self.quorum_size]
+        if self.state == "LEADER" and self.log_term(n) == self.current_term:
+            self.commit_index = n
+
+    def apply_log_commands(self):
+        """ Applies the log commands that are safe to be executed to the state machine.
+        Responds to the client request if the server is the leader. """
+
+        # If commitIndex > lastApplied:
+        # increment lastApplied, apply log[lastApplied] to state machine
+        while self.commit_index > self.last_applied:
+            self.last_applied += 1
+            cmd = self.logs[self.last_applied]
+            self.execute_command(cmd)
+
+            if self.state == "LEADER":
+                # Responds to the client
+                message = Message("ClientRequest-Reply", from_address=self.address, to_address=cmd.client_address)
+                message.response = "Command executed successfully!"
+                message.send(self.socket)
+
+    def execute_command(self, command):
+        """ Applies the current command in the state machine, if it has not already been applied. """
+        if not command.executed:
+            command.old_value = self.dictionary_data[command.position]
+            self.dictionary_data[command.position] = command.new_value
+
+    def revert_command(self, command):
+        """ Reverts the current command in the state machine, if it has already been applied. """
+        if command.executed:
+            self.dictionary_data[command.position] = command.old_value
+
+    def save_state(self):
+        """ Saves the current node status to a json configuration file. """
+
+        file_name = "configs/server-{0}.json".format(self.node_id)
 
         data = dict()
         data['node_id'] = self.node_id
@@ -116,8 +160,10 @@ class Node(object):
             file.close()
 
     def update_state(self):
+        """ updates the current node status
+        with information obtained from a json configuration file. """
 
-        file_name = "configs'\server-{0}.json".format(self.node_id)
+        file_name = "configs/server-{0}.json".format(self.node_id)
 
         with open(file_name, "r") as file:
             data = json.loads(file.read())
@@ -132,17 +178,6 @@ class Node(object):
                     self.logs.append(Log(cmd, log['term']))
 
             file.close()
-
-    def execute_command(self, command):
-        """ Applies the current command in the state machine, if it has not already been applied. """
-        if not command.executed:
-            command.old_value = self.dictionary_data[command.position]
-            self.dictionary_data[command.position] = command.new_value
-
-    def revert_command(self, command):
-        """ Reverts the current command in the state machine, if it has already been applied. """
-        if command.executed:
-            self.dictionary_data[command.position] = command.old_value
 
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Leader Election ------------------------------------------------------------------------------------------- """
@@ -405,12 +440,8 @@ class Node(object):
                 if req.commit_index > self.commit_index:
                     self.commit_index = min(req.commit_index, len(self.logs))
 
-                # If commitIndex > lastApplied:
-                # increment lastApplied, apply log[lastApplied] to state machine
-                while self.commit_index > self.last_applied:
-                    self.last_applied += 1
-                    cmd = self.logs[self.last_applied]
-                    self.execute_command(cmd)
+                # Execute ready commands
+                self.apply_log_commands()
 
         # ----------------------------------------
         # Send a reply for 'AppendEntries' request
@@ -442,25 +473,12 @@ class Node(object):
                 self.match_index[req.from_id] = req.match_index  # max(self.match_index[req.from_id], req.match_index)
                 self.next_index[req.from_id] = req.match_index + 1
 
-                # If there exists an N such that N > commitIndex,
-                # a majority of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N
-                match_list = [self.match_index[i] for i in self.match_index]
-                match_list.append(len(self.logs))
-                match_list.sort(reverse=True)
-                n = match_list[self.quorum_size]
-                if self.state == "LEADER" and self.log_term(n) == self.current_term:
-                    self.commit_index = n
+                # Commit all safe log entries
+                self.advance_commit_index()
 
-                # If commitIndex > lastApplied:
-                # increment lastApplied, apply log[lastApplied] to state machine
-                while self.commit_index > self.last_applied:
-                    self.last_applied += 1
-                    cmd = self.logs[self.last_applied]
-                    self.execute_command(cmd)
-
-                    # Responds to the client
-                    message = Message("ClientRequest-Reply", from_address=self.address, to_address=cmd.client_address)
-                    message.send(self.socket)
+                # Execute ready commands
+                # Responds to client requests
+                self.apply_log_commands()
 
             else:
                 # Follower’s log is inconsistent with the leader’s,
@@ -488,21 +506,23 @@ class Node(object):
             if cmd.action == "GET":
                 # Reply with dictionary content
                 # self.start_heartbeat()
+                request.from_id = self.node_id
                 request.response = self.dictionary_data[cmd.position]
                 request.reply(self.socket)
             else:
                 # Check if the request has already been executed before
                 for log in reversed(self.logs):
                     if log.command.serial == cmd.serial:
-                        request.response = "Success!"
+                        request.from_id = self.node_id
+                        request.response = "Command already executed successfully!"
                         request.reply(self.socket)
                         return
 
                 # Append the new command to the log,
                 # and reply once it has been applied to the state machine
                 self.logs.append(Log(cmd, self.current_term))
-
         else:
             # Reply with the leader's address
+            request.from_id = self.node_id
             request.leader_address = self.leader_address
             request.reply(self.socket)

@@ -34,5 +34,11 @@
   "term": 0,
   "voted_for": null,
   "logs": null,
-  "dict_data": null
+  "dict_data": {
+    "1": "Blue",
+    "2": "Yellow",
+    "3": "Red",
+    "4": "Green",
+    "5": "White"
+  }
 }
