@@ -1,8 +1,30 @@
 import json
+import time
+import random
 
 
-# def deserialize(object_type, json_data):
-#     return object_type(**json.loads(json_data))
+with open('configs/config.json', 'r') as file:
+    config = json.load(file)
+
+TIME_TO_RETRY = config['TIME_TO_RETRY']
+SERVER_TIMEOUT = config['SERVER_TIMEOUT']
+
+HEARTBEAT_TIMEOUT = config['HEARTBEAT_TIMEOUT']
+ELECTION_INTERVAL = config['ELECTION_INTERVAL']
+
+
+def random_timeout():
+    """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
+    return time.time() + (random.randint(*ELECTION_INTERVAL))
+
+
+# ----------------------------------
+# RESPONSE_TIMEOUT = 5
+# RESPONSE_SERVER_TIMEOUT = 1.0
+
+# HEARTBEAT_TIMEOUT = 2
+# FIXED_RANDOM_INTERVAL = (3, 5)
+# ----------------------------------
 
 
 class Host(object):
@@ -67,6 +89,9 @@ class Log(object):
 
     def serialize(self):
         return json.dumps(self, default=lambda o: o.__dict__, indent=4)
+
+    def __str__(self):
+        return "(" + str(self.command) + " " + str(self.term) + ")"
 
 
 # if __name__ == '__main__':

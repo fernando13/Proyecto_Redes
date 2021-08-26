@@ -41,15 +41,20 @@ if __name__ == '__main__':
     msg = Message('RequestVote', server.address, server.address)
     msg.entries = server.logs
 
-    server.save_state()
+    msg = Message('AppendEntries', server.address, server.address)
+    msg.direction = "request"
+    msg.entries = server.logs
+    print(msg)
 
-    # -------------------------------------------------------------------
-
-    server_new = Node(node_id, server_address, 'FOLLOWER', node_list, sock)
-    server_new.update_state()
-
-    print(server_new)
-    print("Current term: ", server_new.current_term)
-    print("Voted for: ", server_new.voted_for)
-    for log in server_new.logs:
-        print(log.command)
+    # server.save_state()
+    #
+    # # -------------------------------------------------------------------
+    #
+    # server_new = Node(node_id, server_address, 'FOLLOWER', node_list, sock)
+    # server_new.update_state()
+    #
+    # print(server_new)
+    # print("Current term: ", server_new.current_term)
+    # print("Voted for: ", server_new.voted_for)
+    # for log in server_new.logs:
+    #     print(log.command)

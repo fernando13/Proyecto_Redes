@@ -93,7 +93,7 @@ class Message(object):
                                  'Term': [str(self.term)],
                                  'Prev_index': [str(self.prev_index)],
                                  'Prev_term': [str(self.prev_term)],
-                                 'Entries': [str(self.entries)],
+                                 'Entries': [[str(log) for log in self.entries]],
                                  'Commit_index': [str(self.commit_index)]},
                                 headers="keys", tablefmt='fancy_grid',
                                 colalign=("center", "center", "center", "center", "center", "center", "center"))

@@ -1,6 +1,5 @@
 import socket
 import sys
-import time
 import message as msg
 from utils import *
 from tkinter import *
@@ -15,8 +14,6 @@ that server will reject the client’s request and supply information about the 
 out; clients then try again with randomly-chosen servers.
 """
 
-RESPONSE_TIMEOUT = 5
-RESPONSE_SERVER_TIMEOUT = 1.0
 
 client_address = None
 server_address = None
@@ -86,7 +83,7 @@ def send_request():
     command = Command(client_address, serial, op, pos, new_value)
 
     response_ok = False
-    timeout = time.time() + RESPONSE_TIMEOUT
+    timeout = time.time() + TIME_TO_RETRY
     while True:
 
         if not server_address:
@@ -103,7 +100,7 @@ def send_request():
             # Receive response
             # print('\nWaiting to receive...\n')
 
-            sock.settimeout(RESPONSE_SERVER_TIMEOUT)
+            sock.settimeout(SERVER_TIMEOUT)
             data, server = sock.recvfrom(4096)
 
             message = msg.Message.deserialize(data.decode())

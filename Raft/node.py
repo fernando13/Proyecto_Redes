@@ -1,26 +1,7 @@
-import time
-import random
 from message import *
 from math import floor
 from tabulate import tabulate
-
-# HEARTBEAT_TIMEOUT = 0.1
-#
-#
-# def random_timeout():
-#     """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
-#     return time.time() + (random.randint(150, 300) / 1000)
-
-# For Test ------------------------------------------------------------------------
-HEARTBEAT_TIMEOUT = 2
-
-
-def random_timeout():
-    """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
-    return time.time() + (random.randint(3, 5))
-
-
-# ---------------------------------------------------------------------------------
+from utils import *
 
 
 class Node(object):
@@ -346,6 +327,7 @@ class Node(object):
         """ Sends AppendEntries RPCs to each of the other servers in the cluster. """
 
         print("\nSending AppendEntries\n")
+        self.save_state()
 
         for node in self.node_list:
             self.send_append_entries(node)
@@ -488,6 +470,13 @@ class Node(object):
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Client Interaction ---------------------------------------------------------------------------------------- """
 
+    def get_log_by_serial(self, serial):
+        """ Returns the log that contains this serial number. """
+        for log in self.logs:
+            if log.command.serial == serial:
+                return log
+        return None
+
     def receive_client_request(self, request):
         """ Receives a request from a client.
         The leader accepts log entries from clients, replicates them on other servers,
@@ -496,8 +485,7 @@ class Node(object):
         and supply information about the most recent leader it has heard.
         • If it receives a command whose serial number has already been executed,
         it responds immediately without re-executing the request.
-        • Read-only operations can be handled without writing anything into the log
-        (exchange heartbeat messages with a majority of the cluster before responding to read-only requests). """
+        • Read-only operations can be handled without writing anything into the log. """
 
         cmd = request.command
 
@@ -511,16 +499,19 @@ class Node(object):
                 request.reply(self.socket)
             else:
                 # Check if the request has already been executed before
-                for log in reversed(self.logs):
-                    if log.command.serial == cmd.serial:
+                log = self.get_log_by_serial(cmd.serial)
+
+                if log:
+                    if log.command.executed:
                         request.from_id = self.node_id
                         request.response = "Command already executed successfully!"
                         request.reply(self.socket)
-                        return
+                else:
+                    # Append the new command to the log,
+                    # and reply once it has been applied to the state machine
+                    self.logs.append(Log(cmd, self.current_term))
+                    self.start_heartbeat()
 
-                # Append the new command to the log,
-                # and reply once it has been applied to the state machine
-                self.logs.append(Log(cmd, self.current_term))
         else:
             # Reply with the leader's address
             request.from_id = self.node_id
