@@ -16,6 +16,7 @@ class Node(object):
         self.socket = socket
         self.leader_address = None  # Address of the current leader
         self.quorum_size = floor((len(node_list) + 1) / 2)
+        # self.quorum_size = 2
         self.dictionary_data = None
 
         self.leader_address = None  # Address of the current leader
@@ -345,9 +346,11 @@ class Node(object):
 
         # If last log index ≥ nextIndex for a follower:
         # send AppendEntries RPC with log entries starting at nextIndex
-        if len(self.logs) >= self.next_index[node.node_id]:
+        a = len(self.logs)
+        b = self.next_index[node.node_id]
+        if a >= b:
             begin_entries = (self.next_index[node.node_id] - 1)
-            entries = self.logs[begin_entries:-1]
+            entries = self.logs[begin_entries:]
         else:
             entries = []
 
@@ -412,7 +415,7 @@ class Node(object):
                             self.logs.pop()
 
                         # Append any new entries not already in the log
-                        self.logs[index] = (req.entries[i])
+                        self.logs.append(req.entries[i])
 
                     index += 1
 
@@ -425,6 +428,7 @@ class Node(object):
                 # Execute ready commands
                 self.apply_log_commands()
 
+                self.save_state()  # !!!!
         # ----------------------------------------
         # Send a reply for 'AppendEntries' request
         # Arguments:
