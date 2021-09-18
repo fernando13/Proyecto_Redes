@@ -15,8 +15,8 @@ class Node(object):
         self.node_list = node_list  # List of all servers in the system [(node_id, address)]
         self.socket = socket
         self.leader_address = None  # Address of the current leader
-        self.quorum_size = floor((len(node_list) + 1) / 2)
-        # self.quorum_size = 2
+        # self.quorum_size = floor((len(node_list) + 1) / 2)
+        self.quorum_size = 3
         self.dictionary_data = None
 
         self.leader_address = None  # Address of the current leader
@@ -87,6 +87,10 @@ class Node(object):
         match_list.append(len(self.logs))
         match_list.sort(reverse=True)
         n = match_list[self.quorum_size]
+
+        print(self.match_index)
+        print("Numero Quorum: ", n)
+
         if self.state == "LEADER" and self.log_term(n) == self.current_term:
             self.commit_index = n
 
@@ -98,18 +102,20 @@ class Node(object):
         # increment lastApplied, apply log[lastApplied] to state machine
         while self.commit_index > self.last_applied:
             self.last_applied += 1
-            cmd = self.logs[self.last_applied]
+            cmd = self.logs[self.last_applied-1].command
             self.execute_command(cmd)
 
             if self.state == "LEADER":
                 # Responds to the client
-                message = Message("ClientRequest-Reply", from_address=self.address, to_address=cmd.client_address)
+                message = Message("ClientRequest", from_address=tuple(cmd.client_address), to_address=self.address)
+                message.from_id = self.node_id
                 message.response = "Command executed successfully!"
-                message.send(self.socket)
+                message.reply(self.socket)
 
     def execute_command(self, command):
         """ Applies the current command in the state machine, if it has not already been applied. """
         if not command.executed:
+            print('execute_command')
             command.old_value = self.dictionary_data[command.position]
             self.dictionary_data[command.position] = command.new_value
 
@@ -346,9 +352,7 @@ class Node(object):
 
         # If last log index ≥ nextIndex for a follower:
         # send AppendEntries RPC with log entries starting at nextIndex
-        a = len(self.logs)
-        b = self.next_index[node.node_id]
-        if a >= b:
+        if len(self.logs) >= self.next_index[node.node_id]:
             begin_entries = (self.next_index[node.node_id] - 1)
             entries = self.logs[begin_entries:]
         else:
@@ -428,7 +432,7 @@ class Node(object):
                 # Execute ready commands
                 self.apply_log_commands()
 
-                self.save_state()  # !!!!
+                self.save_state()
         # ----------------------------------------
         # Send a reply for 'AppendEntries' request
         # Arguments:
@@ -502,6 +506,7 @@ class Node(object):
                 request.response = self.dictionary_data[cmd.position]
                 request.reply(self.socket)
             else:
+
                 # Check if the request has already been executed before
                 log = self.get_log_by_serial(cmd.serial)
 

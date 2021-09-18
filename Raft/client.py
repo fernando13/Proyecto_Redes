@@ -110,6 +110,7 @@ def send_request():
                 if message.direction == "reply":
                     # Receives the response to the request
                     if message.response:
+                        print("waldo peroncho")
                         txt.delete("1.0", END)
                         txt.insert(END, message.response + "\n")
                         response_ok = True
