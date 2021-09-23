@@ -31,27 +31,11 @@
       ]
     }
   ],
-  "term": 2,
+  "term": 0,
   "voted_for": null,
-  "logs": [
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-09-18 11:39:39.730822",
-        "action": "SET",
-        "position": "1",
-        "new_value": "okote",
-        "old_value": "Blue",
-        "executed": false
-      },
-      "term": 2
-    }
-  ],
+  "logs": null,
   "dict_data": {
-    "1": "okote",
+    "1": "Blue",
     "2": "Yellow",
     "3": "Red",
     "4": "Green",

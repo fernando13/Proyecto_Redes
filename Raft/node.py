@@ -86,7 +86,7 @@ class Node(object):
         match_list = [self.match_index[i] for i in self.match_index]
         match_list.append(len(self.logs))
         match_list.sort(reverse=True)
-        n = match_list[self.quorum_size]
+        n = match_list[self.quorum_size - 1]
 
         print(self.match_index)
         print("Numero Quorum: ", n)
@@ -115,9 +115,9 @@ class Node(object):
     def execute_command(self, command):
         """ Applies the current command in the state machine, if it has not already been applied. """
         if not command.executed:
-            print('execute_command')
             command.old_value = self.dictionary_data[command.position]
             self.dictionary_data[command.position] = command.new_value
+            command.executed = True
 
     def revert_command(self, command):
         """ Reverts the current command in the state machine, if it has already been applied. """
@@ -354,7 +354,12 @@ class Node(object):
         # send AppendEntries RPC with log entries starting at nextIndex
         if len(self.logs) >= self.next_index[node.node_id]:
             begin_entries = (self.next_index[node.node_id] - 1)
-            entries = self.logs[begin_entries:]
+            entries = []
+            for log in self.logs[begin_entries:]:
+                cmd = log.command
+                cmd_entry = Command(cmd.client_address, cmd.serial, cmd.action, cmd.position, cmd.new_value)
+                log_entry = Log(cmd_entry, log.term)
+                entries.append(log_entry)
         else:
             entries = []
 
@@ -428,6 +433,7 @@ class Node(object):
                 # If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
                 if req.commit_index > self.commit_index:
                     self.commit_index = min(req.commit_index, len(self.logs))
+                print("Followe Commit: ", self.commit_index, 'LEADER COMMIT: ', req.commit_index)
 
                 # Execute ready commands
                 self.apply_log_commands()
