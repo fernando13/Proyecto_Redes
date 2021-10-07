@@ -15,8 +15,7 @@ class Node(object):
         self.node_list = node_list  # List of all servers in the system [(node_id, address)]
         self.socket = socket
         self.leader_address = None  # Address of the current leader
-        # self.quorum_size = floor((len(node_list) + 1) / 2)
-        self.quorum_size = 3
+        self.quorum_size = floor((len(node_list) + 1) / 2)
         self.dictionary_data = None
 
         self.leader_address = None  # Address of the current leader

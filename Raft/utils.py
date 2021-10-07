@@ -15,7 +15,7 @@ ELECTION_INTERVAL = config['ELECTION_INTERVAL']
 
 def random_timeout():
     """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
-    return time.time() + (random.randint(*ELECTION_INTERVAL))
+    return time.time() + (random.uniform(*ELECTION_INTERVAL))
 
 
 # ----------------------------------

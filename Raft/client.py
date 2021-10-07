@@ -40,6 +40,14 @@ def get_client_data(file_name):
     return address, servers
 
 
+def clear_all():
+    """ Clear all fields. """
+    operation.set("")
+    position.set("")
+    value.set("")
+    txt.delete("1.0", END)
+
+
 def check_data(action, index, new_value):
     """ Checks if the given data is consistent. """
     ok_data = True
@@ -98,8 +106,6 @@ def send_request():
             message.send(sock)
 
             # Receive response
-            # print('\nWaiting to receive...\n')
-
             sock.settimeout(SERVER_TIMEOUT)
             data, server = sock.recvfrom(4096)
 
@@ -125,16 +131,10 @@ def send_request():
                             server_address = None
 
         except socket.timeout as e:
-            # Timeout: no response received.
-            # txt.delete("1.0", END)
-            # txt.insert(END, "Error: timeout")
             print(e)
             server_address = None
 
         except socket.error as e:
-            # if e.args[0] == 10035 or e.args[0] == 10054:
-            # txt.delete("1.0", END)
-            # txt.insert(END, str(e) + "\n")
             print(e)
             server_address = None
 
@@ -176,9 +176,6 @@ if __name__ == '__main__':
     position = StringVar()
     value = StringVar()
 
-    operation.set('GET')
-    position.set(1)
-
     # Operation
     label_op = Label(root, text="Operation ", bd=4)
     label_op.place(x=10, y=30)
@@ -206,9 +203,13 @@ if __name__ == '__main__':
     entry_port = Entry(root, textvariable=value, width=25, bd=3)
     entry_port.place(x=90, y=90)
 
+    # Clear Button
+    btn_clear = Button(root, text="Clear", command=clear_all, width=10, bd=4)
+    btn_clear.place(x=70, y=150)
+
     # Send Button
-    button = Button(root, text="Send", command=send_request, width=15, bd=4)
-    button.place(x=110, y=150)
+    button = Button(root, text="Send", command=send_request, width=10, bd=4)
+    button.place(x=190, y=150)
 
     # Information
     txt = Text(root, height=8, width=40)
