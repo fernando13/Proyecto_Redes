@@ -13,36 +13,36 @@ class Message(object):
                  prev_index=None, prev_term=None, entries=None, commit_index=None, success=None, match_index=None):
 
         # Common fields
-        self.msg_type = msg_type
-        self.from_address = from_address
-        self.to_address = to_address
-        self.direction = direction
-        self.from_id = from_id
-        self.term = term
+        self.msg_type = msg_type  # Type of message to send (RequestVote, RequestVote-Reply, AppendEntries, AppendEntries-Reply, ClientRequest, ClientRequest-Reply)
+        self.from_address = from_address  # Sender's address
+        self.to_address = to_address  # Recipient's address
+        self.direction = direction  # Way of the message (Request / Reply)
+        self.from_id = from_id  # Id of the server that sends the message
+        self.term = term  # Term number owned by the server that sends the message
 
         # RequestVote
-        self.last_log_index = last_log_index
-        self.last_log_term = last_log_term
+        self.last_log_index = last_log_index  # Index of the last candidate record entry
+        self.last_log_term = last_log_term  # Term of last candidate record entry
 
         # RequestVote-Reply
-        self.granted = granted
+        self.granted = granted  # True means the candidate received the vote
 
         # AppendEntries
-        self.prev_index = prev_index
-        self.prev_term = prev_term
-        self.entries = entries
-        self.commit_index = commit_index
+        self.prev_index = prev_index  # Log entry index immediately prior to the new ones
+        self.prev_term = prev_term  # Term of the prev_index entry
+        self.entries = entries  # Log entries to store (empty for heartbeats)
+        self.commit_index = commit_index  # Leader's commit index.
 
         # AppendEntries-Reply
-        self.success = success
-        self.match_index = match_index
+        self.success = success  # True if the follower contains an entry that matches prev_index and prev_term
+        self.match_index = match_index  # Log entry index in which the follower matched the leader
 
         # ClientRequest
-        self.command = command
+        self.command = command  # Operation requested by the client to be executed in the distributed system
 
         # ClientRequest-Reply
-        self.response = response
-        self.leader_address = leader_address
+        self.response = response  # Response message to the operation requested by the client previously
+        self.leader_address = leader_address  # Address of the last leader known to the server
 
     def send(self, socket):
         self.direction = "request"

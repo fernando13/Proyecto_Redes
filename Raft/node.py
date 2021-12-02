@@ -9,16 +9,17 @@ class Node(object):
     components for the implementation of the raft consensus algorithm. """
 
     def __init__(self, node_id, address, state, node_list, socket):
-        self.node_id = node_id
-        self.address = address  # (udp_ip, udp_port)
-        self.state = state      # LEADER/FOLLOWER/CANDIDATE
-        self.node_list = node_list  # List of all servers in the system [(node_id, address)]
-        self.socket = socket
-        self.leader_address = None  # Address of the current leader
-        self.quorum_size = floor((len(node_list) + 1) / 2)
-        self.dictionary_data = None
 
+        self.node_id = node_id  # Node unique identifier
+        self.address = address  # Address of the node (udp_ip, udp_port)
+        self.state = state      # Current node status (LEADER / FOLLOWER / CANDIDATE).
+        self.node_list = node_list  # List of all servers in the system [(node_id, address)]
         self.leader_address = None  # Address of the current leader
+        self.dictionary_data = None  # Shared resource on the system
+        self.socket = socket
+
+        # Number of nodes required to reach consensus.
+        self.quorum_size = floor((len(node_list) + 1) / 2)
 
         # Timeout to wait for a 'AppendEntries' message
         self.election_timeout = random_timeout()
@@ -86,9 +87,6 @@ class Node(object):
         match_list.append(len(self.logs))
         match_list.sort(reverse=True)
         n = match_list[self.quorum_size - 1]
-
-        print(self.match_index)
-        print("Numero Quorum: ", n)
 
         if self.state == "LEADER" and self.log_term(n) == self.current_term:
             self.commit_index = n
@@ -432,7 +430,6 @@ class Node(object):
                 # If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
                 if req.commit_index > self.commit_index:
                     self.commit_index = min(req.commit_index, len(self.logs))
-                print("Followe Commit: ", self.commit_index, 'LEADER COMMIT: ', req.commit_index)
 
                 # Execute ready commands
                 self.apply_log_commands()

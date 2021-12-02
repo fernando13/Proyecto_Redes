@@ -6,25 +6,26 @@ import random
 with open('configs/config.json', 'r') as file:
     config = json.load(file)
 
+# Maximum waiting time to wait for a response message
+# from the distributed system to a previously sent request.
 TIME_TO_RETRY = config['TIME_TO_RETRY']
+
+# Maximum waiting time, to wait for a response message
+# from a single server to which the request was sent.
 SERVER_TIMEOUT = config['SERVER_TIMEOUT']
 
+# Timeout for a leading server to send an
+# AppendEntries message to the other servers in the cluster.
 HEARTBEAT_TIMEOUT = config['HEARTBEAT_TIMEOUT']
+
+# Wait interval, to wait for an AppendEntries message sent by the leader
+# (A random number contained in the given interval is taken).
 ELECTION_INTERVAL = config['ELECTION_INTERVAL']
 
 
 def random_timeout():
     """ Returns a timeout chosen randomly from a fixed interval (150-300ms). """
     return time.time() + (random.uniform(*ELECTION_INTERVAL))
-
-
-# ----------------------------------
-# RESPONSE_TIMEOUT = 5
-# RESPONSE_SERVER_TIMEOUT = 1.0
-
-# HEARTBEAT_TIMEOUT = 2
-# FIXED_RANDOM_INTERVAL = (3, 5)
-# ----------------------------------
 
 
 class Host(object):

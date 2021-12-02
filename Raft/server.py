@@ -78,7 +78,7 @@ if __name__ == '__main__':
         except socket.error as e:
             # Error: 10035 --> server didn't receive data from 'sock.recvfrom(4096)'
             # Error: 10054 --> problems contacting another node
-            if e.args[0] == 10035 or e.args[0] == 10054:
+            if e.args[0] == 10035 or e.args[0] == 10054 or e.args[0] == 11:
 
                 # It's time to send a heartbeat message
                 server.heartbeat_timeout_due()
