@@ -1,14 +1,7 @@
 {
-  "node_id": 4,
-  "port": 3004,
+  "node_id": 1,
+  "port": 3001,
   "node_list": [
-    {
-      "node_id": 1,
-      "address": [
-        "192.168.0.54",
-        3001
-      ]
-    },
     {
       "node_id": 2,
       "address": [
@@ -24,6 +17,13 @@
       ]
     },
     {
+      "node_id": 4,
+      "address": [
+        "192.168.0.54",
+        3004
+      ]
+    },
+    {
       "node_id": 5,
       "address": [
         "192.168.0.54",
@@ -31,8 +31,8 @@
       ]
     }
   ],
-  "term": 58,
-  "voted_for": null,
+  "term": 20,
+  "voted_for": 1,
   "logs": [
     {
       "command": {
@@ -59,8 +59,8 @@
         "action": "SET",
         "position": "2",
         "new_value": "juan",
-        "old_value": null,
-        "executed": false
+        "old_value": "Yellow",
+        "executed": true
       },
       "term": 20
     },
@@ -74,16 +74,16 @@
         "action": "SET",
         "position": "3",
         "new_value": "carlo",
-        "old_value": null,
-        "executed": false
+        "old_value": "Red",
+        "executed": true
       },
       "term": 20
     }
   ],
   "dict_data": {
     "1": "hola",
-    "2": "Yellow",
-    "3": "Red",
+    "2": "juan",
+    "3": "carlo",
     "4": "Green",
     "5": "White"
   }

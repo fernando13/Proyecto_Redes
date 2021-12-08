@@ -219,7 +219,7 @@ class Node(object):
         granted = False  # True means candidate received vote
 
         # Server's current term is out of date
-        if self.current_term < req.term:
+        if self.current_term < req.term:  # or (self.current_term == req.term and last_log_index < req.last_log_index): # ???
             self.step_down(req.term)
 
         if (self.voted_for in [None, req.from_id]) and (self.current_term == req.term):

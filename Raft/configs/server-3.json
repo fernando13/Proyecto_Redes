@@ -31,8 +31,8 @@
       ]
     }
   ],
-  "term": 55,
-  "voted_for": null,
+  "term": 21,
+  "voted_for": 2,
   "logs": [
     {
       "command": {
@@ -40,59 +40,14 @@
           "192.168.0.54",
           4001
         ],
-        "serial": "('192.168.0.54', 4001)-2021-10-06 21:34:56.295443",
-        "action": "SET",
-        "position": "3",
-        "new_value": "juan",
-        "old_value": "Red",
-        "executed": true
-      },
-      "term": 48
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-10-06 21:35:10.358968",
-        "action": "SET",
-        "position": "4",
-        "new_value": "calo",
-        "old_value": "Green",
-        "executed": true
-      },
-      "term": 50
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-10-06 21:35:31.294325",
-        "action": "SET",
-        "position": "5",
-        "new_value": "chupa pig",
-        "old_value": "White",
-        "executed": true
-      },
-      "term": 50
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-10-06 21:36:34.938750",
+        "serial": "('192.168.0.54', 4001)-2021-12-08 19:18:20.793002",
         "action": "SET",
         "position": "1",
-        "new_value": "espiritu",
+        "new_value": "hola",
         "old_value": "Blue",
         "executed": true
       },
-      "term": 50
+      "term": 20
     },
     {
       "command": {
@@ -100,21 +55,36 @@
           "192.168.0.54",
           4001
         ],
-        "serial": "('192.168.0.54', 4001)-2021-10-06 21:37:21.299529",
+        "serial": "('192.168.0.54', 4001)-2021-12-08 19:20:01.824572",
         "action": "SET",
         "position": "2",
-        "new_value": "audio",
+        "new_value": "juan",
         "old_value": "Yellow",
         "executed": true
       },
-      "term": 50
+      "term": 20
+    },
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.54",
+          4001
+        ],
+        "serial": "('192.168.0.54', 4001)-2021-12-08 19:20:16.104762",
+        "action": "SET",
+        "position": "3",
+        "new_value": "carlo",
+        "old_value": "Red",
+        "executed": true
+      },
+      "term": 20
     }
   ],
   "dict_data": {
-    "1": "espiritu",
-    "2": "audio",
-    "3": "juan",
-    "4": "calo",
-    "5": "chupa pig"
+    "1": "hola",
+    "2": "juan",
+    "3": "carlo",
+    "4": "Green",
+    "5": "White"
   }
 }

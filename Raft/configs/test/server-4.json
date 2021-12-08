@@ -31,7 +31,7 @@
       ]
     }
   ],
-  "term": 58,
+  "term": 20,
   "voted_for": null,
   "logs": [
     {
@@ -46,36 +46,6 @@
         "new_value": "hola",
         "old_value": "Blue",
         "executed": true
-      },
-      "term": 20
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-12-08 19:20:01.824572",
-        "action": "SET",
-        "position": "2",
-        "new_value": "juan",
-        "old_value": null,
-        "executed": false
-      },
-      "term": 20
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-12-08 19:20:16.104762",
-        "action": "SET",
-        "position": "3",
-        "new_value": "carlo",
-        "old_value": null,
-        "executed": false
       },
       "term": 20
     }
