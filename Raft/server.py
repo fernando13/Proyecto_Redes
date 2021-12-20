@@ -69,7 +69,6 @@ if __name__ == '__main__':
                 if message.direction == "request":
                     server.receive_request_vote(message)
                 else:
-
                     server.receive_request_vote_reply(message)
 
             elif message.msg_type == "ClientRequest":

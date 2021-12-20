@@ -19,7 +19,7 @@ class Node(object):
         self.socket = socket
 
         # Number of nodes required to reach consensus.
-        self.quorum_size = floor((len(node_list) + 1) / 2)
+        self.quorum_size = floor((len(node_list) + 1) / 2) + 1
 
         # Timeout to wait for a 'AppendEntries' message
         self.election_timeout = random_timeout()
@@ -219,7 +219,7 @@ class Node(object):
         granted = False  # True means candidate received vote
 
         # Server's current term is out of date
-        if self.current_term < req.term:  # or (self.current_term == req.term and last_log_index < req.last_log_index): # ???
+        if self.current_term < req.term:
             self.step_down(req.term)
 
         if (self.voted_for in [None, req.from_id]) and (self.current_term == req.term):
@@ -230,8 +230,7 @@ class Node(object):
             last_log_index = len(self.logs)
             last_log_term = self.log_term(last_log_index)
 
-            if (last_log_term < req.last_log_term) or \
-                    (last_log_term == req.last_log_term and last_log_index <= req.last_log_index):
+            if (last_log_term < req.last_log_term) or (last_log_term == req.last_log_term and last_log_index <= req.last_log_index):
                 granted = True
                 self.voted_for = req.from_id
 

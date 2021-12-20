@@ -31,8 +31,8 @@
       ]
     }
   ],
-  "term": 58,
-  "voted_for": null,
+  "term": 22,
+  "voted_for": 1,
   "logs": [
     {
       "command": {

@@ -13,7 +13,7 @@ class Message(object):
                  prev_index=None, prev_term=None, entries=None, commit_index=None, success=None, match_index=None):
 
         # Common fields
-        self.msg_type = msg_type  # Type of message to send (RequestVote, RequestVote-Reply, AppendEntries, AppendEntries-Reply, ClientRequest, ClientRequest-Reply)
+        self.msg_type = msg_type  # Type of message to send (RequestVote, AppendEntries, ClientRequest)
         self.from_address = from_address  # Sender's address
         self.to_address = to_address  # Recipient's address
         self.direction = direction  # Way of the message (Request / Reply)
