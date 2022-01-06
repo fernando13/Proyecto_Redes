@@ -31,57 +31,11 @@
       ]
     }
   ],
-  "term": 22,
-  "voted_for": 1,
-  "logs": [
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-12-08 19:18:20.793002",
-        "action": "SET",
-        "position": "1",
-        "new_value": "hola",
-        "old_value": "Blue",
-        "executed": true
-      },
-      "term": 20
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-12-08 19:20:01.824572",
-        "action": "SET",
-        "position": "2",
-        "new_value": "juan",
-        "old_value": null,
-        "executed": false
-      },
-      "term": 20
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2021-12-08 19:20:16.104762",
-        "action": "SET",
-        "position": "3",
-        "new_value": "carlo",
-        "old_value": null,
-        "executed": false
-      },
-      "term": 20
-    }
-  ],
+  "term": 0,
+  "voted_for": null,
+  "logs": null,
   "dict_data": {
-    "1": "hola",
+    "1": "Blue",
     "2": "Yellow",
     "3": "Red",
     "4": "Green",

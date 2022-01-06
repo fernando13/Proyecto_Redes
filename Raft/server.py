@@ -3,6 +3,7 @@ import socket
 from node import Node
 from message import Message
 from utils import *
+import threading
 
 # python server.py configs\server-1.json
 # python server.py configs\test\server-1.json
@@ -20,6 +21,31 @@ def get_server_info(file_name):
         file.close()
 
     return node_id, port, node_list
+
+
+def handle_request(message):
+
+    # It's time to send a heartbeat message
+    server.heartbeat_timeout_due()
+
+    # Timed out to wait for a heartbeat message
+    server.election_timeout_due()
+
+    if message.msg_type == "AppendEntries":
+        if message.direction == "request":
+            server.receive_append_entries(message)
+        else:
+            server.receive_append_entries_reply(message)
+
+    elif message.msg_type == "RequestVote":
+        if message.direction == "request":
+            server.receive_request_vote(message)
+        else:
+            server.receive_request_vote_reply(message)
+
+    elif message.msg_type == "ClientRequest":
+        if message.direction == "request":
+            server.receive_client_request(message)
 
 
 if __name__ == '__main__':
@@ -51,29 +77,7 @@ if __name__ == '__main__':
             message = Message.deserialize(data.decode())
             print(message)
 
-            """-------------------------------------------------------"""
-
-            # It's time to send a heartbeat message
-            server.heartbeat_timeout_due()
-
-            # Timed out to wait for a heartbeat message
-            server.election_timeout_due()
-
-            if message.msg_type == "AppendEntries":
-                if message.direction == "request":
-                    server.receive_append_entries(message)
-                else:
-                    server.receive_append_entries_reply(message)
-
-            elif message.msg_type == "RequestVote":
-                if message.direction == "request":
-                    server.receive_request_vote(message)
-                else:
-                    server.receive_request_vote_reply(message)
-
-            elif message.msg_type == "ClientRequest":
-                if message.direction == "request":
-                    server.receive_client_request(message)
+            threading.Thread(target=handle_request(message)).start()
 
         except socket.error as e:
             # Error: 10035 --> server didn't receive data from 'sock.recvfrom(4096)'

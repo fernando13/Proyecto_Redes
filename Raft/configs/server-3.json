@@ -31,9 +31,9 @@
       ]
     }
   ],
-  "term": 0,
-  "voted_for": null,
-  "logs": null,
+  "term": 81,
+  "voted_for": 2,
+  "logs": [],
   "dict_data": {
     "1": "Blue",
     "2": "Yellow",

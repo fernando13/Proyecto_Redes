@@ -6,6 +6,8 @@ from tkinter import *
 from random import choice
 from datetime import datetime
 
+# python client.py configs\client-1.json
+
 """
 Clients of Raft send all of their requests to the leader.
 When a client first starts up, it connects to a randomly chosen server. If the client’s first choice is not the leader,
