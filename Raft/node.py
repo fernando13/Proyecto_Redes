@@ -18,8 +18,7 @@ class Node(object):
         self.leader_address = None  # Address of the current leader
         self.dictionary_data = None  # Shared resource on the system
         self.socket = socket
-        self.lock_leader = threading.Lock()
-        self.lock_follower = threading.Lock()
+        self.lock_request = threading.Lock()
 
         # Number of nodes required to reach consensus.
         self.quorum_size = floor((len(node_list) + 1) / 2) + 1
@@ -344,42 +343,40 @@ class Node(object):
         """ AppendEntries RPCs are initiated by leaders
         to replicate log entries and to provide a form of heartbeat. """
 
-        with self.lock_leader:
+        # The leader maintains a nextIndex for each follower, which is the index
+        # of the next log entry the leader will send to that follower
+        prev_index = self.next_index[node.node_id] - 1  # Index of log entry immediately preceding new ones
+        prev_term = self.log_term(prev_index)  # Term of prevLogIndex entry (from the leader)
 
-            # The leader maintains a nextIndex for each follower, which is the index
-            # of the next log entry the leader will send to that follower
-            prev_index = self.next_index[node.node_id] - 1  # Index of log entry immediately preceding new ones
-            prev_term = self.log_term(prev_index)  # Term of prevLogIndex entry (from the leader)
+        # If last log index ≥ nextIndex for a follower:
+        # send AppendEntries RPC with log entries starting at nextIndex
+        if len(self.logs) >= self.next_index[node.node_id]:
+            begin_entries = (self.next_index[node.node_id] - 1)
+            entries = []
+            for log in self.logs[begin_entries:]:
+                cmd = log.command
+                cmd_entry = Command(cmd.client_address, cmd.serial, cmd.action, cmd.position, cmd.new_value)
+                log_entry = Log(cmd_entry, log.term)
+                entries.append(log_entry)
+        else:
+            entries = []
 
-            # If last log index ≥ nextIndex for a follower:
-            # send AppendEntries RPC with log entries starting at nextIndex
-            if len(self.logs) >= self.next_index[node.node_id]:
-                begin_entries = (self.next_index[node.node_id] - 1)
-                entries = []
-                for log in self.logs[begin_entries:]:
-                    cmd = log.command
-                    cmd_entry = Command(cmd.client_address, cmd.serial, cmd.action, cmd.position, cmd.new_value)
-                    log_entry = Log(cmd_entry, log.term)
-                    entries.append(log_entry)
-            else:
-                entries = []
+        commit_index = self.commit_index
 
-            commit_index = self.commit_index
+        # ------------------------------------------------------------------------------------------------------------
 
-            # ------------------------------------------------------------------------------------------------------------
-
-            message = Message('AppendEntries',
-                              from_address=self.address,
-                              to_address=node.address,
-                              leader_address=self.address,
-                              from_id=self.node_id,
-                              term=self.current_term,
-                              prev_index=prev_index,
-                              prev_term=prev_term,
-                              entries=entries,
-                              commit_index=commit_index)
-            # Send message...
-            message.send(self.socket)
+        message = Message('AppendEntries',
+                          from_address=self.address,
+                          to_address=node.address,
+                          leader_address=self.address,
+                          from_id=self.node_id,
+                          term=self.current_term,
+                          prev_index=prev_index,
+                          prev_term=prev_term,
+                          entries=entries,
+                          commit_index=commit_index)
+        # Send message...
+        message.send(self.socket)
 
     def receive_append_entries(self, req):
         """ Receives a AppendEntries RPC from the leader. """
@@ -393,98 +390,94 @@ class Node(object):
         # 4. Append any new entries not already in the log
         # 5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
 
-        with self.lock_follower:
+        success = False  # True if follower contained entry matching prevLogIndex and prevLogTerm
+        match_index = 0
 
-            success = False  # True if follower contained entry matching prevLogIndex and prevLogTerm
-            match_index = 0
+        # Server's current term is out of date
+        if self.current_term < req.term:
+            self.step_down(req.term)
 
-            # Server's current term is out of date
-            if self.current_term < req.term:
-                self.step_down(req.term)
+        if self.current_term == req.term:
+            self.state = 'FOLLOWER'
+            self.leader_address = tuple(req.from_address)
 
-            if self.current_term == req.term:
-                self.state = 'FOLLOWER'
-                self.leader_address = tuple(req.from_address)
+            # Election timeout is updated
+            self.election_timeout = random_timeout()
 
-                # Election timeout is updated
-                self.election_timeout = random_timeout()
+            prev_term = self.log_term(req.prev_index)
 
-                prev_term = self.log_term(req.prev_index)
+            # Log contains an entry at prevLogIndex whose term matches prevLogTerm
+            if req.prev_index == 0 or (req.prev_index <= len(self.logs) and prev_term == req.prev_term):
+                success = True
 
-                # Log contains an entry at prevLogIndex whose term matches prevLogTerm
-                if req.prev_index == 0 or (req.prev_index <= len(self.logs) and prev_term == req.prev_term):
-                    success = True
+                index = req.prev_index
+                for i in range(len(req.entries)):
 
-                    index = req.prev_index
-                    for i in range(len(req.entries)):
+                    # Entry conflicts with a new one (same index but different terms)
+                    if self.log_term(index + 1) != req.entries[i].term:
 
-                        # Entry conflicts with a new one (same index but different terms)
-                        if self.log_term(index + 1) != req.entries[i].term:
+                        # Delete the existing entry and all that follow it
+                        while len(self.logs) > index:
+                            self.revert_command(self.logs[-1].command)
+                            self.logs.pop()
 
-                            # Delete the existing entry and all that follow it
-                            while len(self.logs) > index:
-                                self.revert_command(self.logs[-1].command)
-                                self.logs.pop()
+                        # Append any new entries not already in the log
+                        self.logs.append(req.entries[i])
 
-                            # Append any new entries not already in the log
-                            self.logs.append(req.entries[i])
+                    index += 1
 
-                        index += 1
+                match_index = index
 
-                    match_index = index
+                # If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+                if req.commit_index > self.commit_index:
+                    self.commit_index = min(req.commit_index, len(self.logs))
 
-                    # If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-                    if req.commit_index > self.commit_index:
-                        self.commit_index = min(req.commit_index, len(self.logs))
+                # Execute ready commands
+                self.apply_log_commands()
 
-                    # Execute ready commands
-                    self.apply_log_commands()
+                self.save_state()
 
-                    self.save_state()
+        # ----------------------------------------
+        # Send a reply for 'AppendEntries' request
+        # Arguments:
+        req.from_id = self.node_id
+        req.term = self.current_term
+        req.success = success
+        req.match_index = match_index
 
-            # ----------------------------------------
-            # Send a reply for 'AppendEntries' request
-            # Arguments:
-            req.from_id = self.node_id
-            req.term = self.current_term
-            req.success = success
-            req.match_index = match_index
-
-            # Send message...
-            print(" -> Reply To:", req.from_address, end="\n\n")
-            req.reply(self.socket)
+        # Send message...
+        print(" -> Reply To:", req.from_address, end="\n\n")
+        req.reply(self.socket)
 
     def receive_append_entries_reply(self, req):
         """ The leader receives a response to the AppendEntries RPC previously sent. """
 
         # Request: [term, success, match_index]
 
-        with self.lock_leader:
+        # Server's current term is out of date
+        if self.current_term < req.term:
+            self.step_down(req.term)
 
-            # Server's current term is out of date
-            if self.current_term < req.term:
-                self.step_down(req.term)
+        if self.state == "LEADER" and self.current_term == req.term:
 
-            if self.state == "LEADER" and self.current_term == req.term:
+            # The leader and follower logs match
+            if req.success:
 
-                # The leader and follower logs match
-                if req.success:
+                # Update nextIndex and matchIndex for follower
+                self.match_index[req.from_id] = req.match_index
+                self.next_index[req.from_id] = req.match_index + 1
 
-                    # Update nextIndex and matchIndex for follower
-                    self.match_index[req.from_id] = req.match_index  # max(self.match_index[req.from_id], req.match_index)
-                    self.next_index[req.from_id] = req.match_index + 1
+                # Commit all safe log entries
+                self.advance_commit_index()
 
-                    # Commit all safe log entries
-                    self.advance_commit_index()
+                # Execute ready commands
+                # Responds to client requests
+                self.apply_log_commands()
 
-                    # Execute ready commands
-                    # Responds to client requests
-                    self.apply_log_commands()
-
-                else:
-                    # Follower’s log is inconsistent with the leader’s,
-                    # decrements next_index and retries the AppendEntries RPC
-                    self.next_index[req.from_id] = max(1, self.next_index[req.from_id] - 1)
+            else:
+                # Follower’s log is inconsistent with the leader’s,
+                # decrements next_index and retries the AppendEntries RPC
+                self.next_index[req.from_id] = max(1, self.next_index[req.from_id] - 1)
 
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Client Interaction ---------------------------------------------------------------------------------------- """
@@ -510,12 +503,13 @@ class Node(object):
 
         if self.state == "LEADER":
 
-            with self.lock_leader:
+            with self.lock_request:
 
                 if cmd.action == "GET":
                     # Reply with dictionary content
                     self.start_heartbeat()
                     time.sleep(SERVER_TIMEOUT/3)
+    
                     request.from_id = self.node_id
                     request.response = self.dictionary_data[cmd.position]
                     request.reply(self.socket)
