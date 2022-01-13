@@ -94,6 +94,7 @@ def send_request():
 
     response_ok = False
     timeout = time.time() + TIME_TO_RETRY
+
     while True:
 
         if not server_address:

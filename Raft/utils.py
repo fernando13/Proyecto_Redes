@@ -3,7 +3,7 @@ import time
 import random
 
 
-with open('configs/config-test.json', 'r') as file:
+with open('configs/config.json', 'r') as file:
     config = json.load(file)
 
 # Maximum waiting time to wait for a response message
