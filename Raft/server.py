@@ -6,7 +6,6 @@ from utils import *
 import threading
 
 # python server.py configs\server-1.json
-# python server.py configs\test\server-1.json
 # sys.argv[1] -->  file.json
 
 

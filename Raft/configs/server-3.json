@@ -31,72 +31,11 @@
       ]
     }
   ],
-  "term": 37,
-  "voted_for": 2,
-  "logs": [
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2022-01-12 21:09:45.337702",
-        "action": "SET",
-        "position": "1",
-        "new_value": "aaa",
-        "old_value": "Blue",
-        "executed": true
-      },
-      "term": 2
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2022-01-12 21:10:35.694784",
-        "action": "SET",
-        "position": "1",
-        "new_value": "aaa",
-        "old_value": "aaa",
-        "executed": true
-      },
-      "term": 2
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4001
-        ],
-        "serial": "('192.168.0.54', 4001)-2022-01-12 21:13:46.723192",
-        "action": "SET",
-        "position": "1",
-        "new_value": "112",
-        "old_value": "aaa",
-        "executed": true
-      },
-      "term": 2
-    },
-    {
-      "command": {
-        "client_address": [
-          "192.168.0.54",
-          4002
-        ],
-        "serial": "('192.168.0.54', 4002)-2022-01-12 21:21:10.800872",
-        "action": "SET",
-        "position": "1",
-        "new_value": "kako",
-        "old_value": "112",
-        "executed": true
-      },
-      "term": 37
-    }
-  ],
+  "term": 56,
+  "voted_for": 1,
+  "logs": [],
   "dict_data": {
-    "1": "kako",
+    "1": "Blue",
     "2": "Yellow",
     "3": "Red",
     "4": "Green",
