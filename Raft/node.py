@@ -14,11 +14,12 @@ class Node(object):
         self.node_id = node_id  # Node unique identifier
         self.address = address  # Address of the node (udp_ip, udp_port)
         self.state = state      # Current node status (LEADER / FOLLOWER / CANDIDATE).
-        self.node_list = node_list  # List of all servers in the system [(node_id, address)]
+        self.node_list = node_list  # List of all servers in the system, not including himself [(node_id, address)]
         self.leader_address = None  # Address of the current leader
         self.dictionary_data = None  # Shared resource on the system
         self.socket = socket
         self.lock_request = threading.Lock()
+        self.lock_log = threading.RLock()
 
         # Number of nodes required to reach consensus.
         self.quorum_size = floor((len(node_list) + 1) / 2) + 1
@@ -317,10 +318,8 @@ class Node(object):
 
     # If last log index ≥ nextIndex for a follower:
     # send AppendEntries RPC with log entries starting at nextIndex
-    #   • If successful: update nextIndex and matchIndex for
-    #   follower (§5.3)
-    #   • If AppendEntries fails because of log inconsistency:
-    #   decrement nextIndex and retry
+    #   • If successful: update nextIndex and matchIndex for follower
+    #   • If AppendEntries fails because of log inconsistency: decrement nextIndex and retry
 
     def heartbeat_timeout_due(self):
         """ It's time to send a heartbeat """
@@ -331,11 +330,13 @@ class Node(object):
     def start_heartbeat(self):
         """ Sends AppendEntries RPCs to each of the other servers in the cluster. """
 
-        print("\nSending AppendEntries\n")
-        self.save_state()
+        with self.lock_log:
 
-        for node in self.node_list:
-            self.send_append_entries(node)
+            print("\nSending AppendEntries\n")
+            self.save_state()
+
+            for node in self.node_list:
+                self.send_append_entries(node)
 
         self.heartbeat_timeout = time.time() + HEARTBEAT_TIMEOUT
 
@@ -460,24 +461,26 @@ class Node(object):
 
         if self.state == "LEADER" and self.current_term == req.term:
 
-            # The leader and follower logs match
-            if req.success:
+            with self.lock_log:
 
-                # Update nextIndex and matchIndex for follower
-                self.match_index[req.from_id] = req.match_index
-                self.next_index[req.from_id] = req.match_index + 1
+                # The leader and follower logs match
+                if req.success:
 
-                # Commit all safe log entries
-                self.advance_commit_index()
+                    # Update nextIndex and matchIndex for follower
+                    self.match_index[req.from_id] = req.match_index
+                    self.next_index[req.from_id] = req.match_index + 1
 
-                # Execute ready commands
-                # Responds to client requests
-                self.apply_log_commands()
+                    # Commit all safe log entries
+                    self.advance_commit_index()
 
-            else:
-                # Follower’s log is inconsistent with the leader’s,
-                # decrements next_index and retries the AppendEntries RPC
-                self.next_index[req.from_id] = max(1, self.next_index[req.from_id] - 1)
+                    # Execute ready commands
+                    # Responds to client requests
+                    self.apply_log_commands()
+
+                else:
+                    # Follower’s log is inconsistent with the leader’s,
+                    # decrements next_index and retries the AppendEntries RPC
+                    self.next_index[req.from_id] = max(1, self.next_index[req.from_id] - 1)
 
     """ ----------------------------------------------------------------------------------------------------------- """
     """ Client Interaction ---------------------------------------------------------------------------------------- """
@@ -515,20 +518,21 @@ class Node(object):
                     request.reply(self.socket)
                 else:
 
-                    # Check if the request has already been executed before
-                    log = self.get_log_by_serial(cmd.serial)
+                    with self.lock_log:
 
-                    if log:
-                        if log.command.executed:
-                            request.from_id = self.node_id
-                            request.response = "Command already executed successfully!"
-                            request.reply(self.socket)
-                    else:
-                        # Append the new command to the log,
-                        # and reply once it has been applied to the state machine
-                        self.logs.append(Log(cmd, self.current_term))
-                        self.start_heartbeat()
+                        # Check if the request has already been executed before
+                        log = self.get_log_by_serial(cmd.serial)
 
+                        if log:
+                            if log.command.executed:
+                                request.from_id = self.node_id
+                                request.response = "Command already executed successfully!"
+                                request.reply(self.socket)
+                        else:
+                            # Append the new command to the log,
+                            # and reply once it has been applied to the state machine
+                            self.logs.append(Log(cmd, self.current_term))
+                            self.start_heartbeat()
         else:
             # Reply with the leader's address
             request.from_id = self.node_id
