@@ -2,23 +2,32 @@
 
 if [ -z "$1" ];
   then
-      servers=5
+      qty_servers=5
   else
-      servers=$1
+      qty_servers=$1
 fi
 
 if [ -z "$2" ];
   then
-      clients=2
+      servers=5
   else
-      clients=$2
+      servers=$2
 fi
 
-echo "Clients: ${clients}"
-echo "Servers: ${servers}"
+if [ -z "$3" ];
+  then
+      clients=2
+  else
+      clients=$3
+fi
+
+
+echo "Servers in the whole system: ${qty_servers}"
+echo "Servers running: ${servers}"
+echo "Clients running: ${clients}"
 
 #gnome-terminal  -- bash -c 'cd `pwd`; python3 raft_setup.py; exec bash'
-gnome-terminal  -- bash -c 'cd `pwd`; python3 raft_setup.py; '
+gnome-terminal  -- bash -c "cd `pwd`; python3 raft_setup.py ${qty_servers} ${clients}; "
 
 for serve in $(seq 1 $servers);
 do
