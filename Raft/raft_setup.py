@@ -1,6 +1,8 @@
 import sys
 import socket
 import json
+import os
+import glob
 
 """ Create an initial setting for each of the servers (json files).
 By default, It creates settings for 5 servers and 3 clients. """
@@ -14,6 +16,15 @@ if __name__ == '__main__':
         cant_servers = 5
         cant_clients = 3
 
+    # ----------------------------------------------------
+    # Remove old files
+    print("\nRemoving old files...")
+    for filename in glob.glob("configs/server-*.json"):
+        os.remove(filename)
+
+    for filename in glob.glob("configs/client-*.json"):
+        os.remove(filename)
+
     # List of all servers
     address_ip = socket.gethostbyname(socket.gethostname())
     servers = []
@@ -26,7 +37,10 @@ if __name__ == '__main__':
     # Initialization of the shared resource
     dict_data = {1: "Blue", 2: "Yellow", 3: "Red", 4: "Green", 5: "White"}
 
+    # ----------------------------------------------------
     # Create configurations for servers
+
+    print("\nCreating server files...")
     for i in range(1, cant_servers + 1):
         config = dict()
         config['node_id'] = i
@@ -49,8 +63,12 @@ if __name__ == '__main__':
         file_name = "configs/server-{0}.json".format(i)
         with open(file_name, "w") as file:
             file.write(json_config)
+            print("->", file_name)
 
+    # ----------------------------------------------------
     # Create configurations for clients
+
+    print("\nCreating client files...")
     for i in range(1, cant_clients + 1):
         config = dict()
         config['port'] = 4000 + i
@@ -63,3 +81,4 @@ if __name__ == '__main__':
         file_name = "configs/client-{0}.json".format(i)
         with open(file_name, "w") as file:
             file.write(json_config)
+            print("->", file_name)
