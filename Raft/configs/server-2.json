@@ -1,0 +1,135 @@
+{
+  "node_id": 2,
+  "port": 3002,
+  "node_list": [
+    {
+      "node_id": 1,
+      "address": [
+        "192.168.0.54",
+        3001
+      ]
+    },
+    {
+      "node_id": 3,
+      "address": [
+        "192.168.0.54",
+        3003
+      ]
+    },
+    {
+      "node_id": 4,
+      "address": [
+        "192.168.0.54",
+        3004
+      ]
+    },
+    {
+      "node_id": 5,
+      "address": [
+        "192.168.0.54",
+        3005
+      ]
+    }
+  ],
+  "term": 1,
+  "voted_for": 1,
+  "logs": [
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.54",
+          4001
+        ],
+        "serial": "('192.168.0.54', 4001)-2022-02-16 21:28:02.343491",
+        "action": "SET",
+        "position": "1",
+        "new_value": "aaaa",
+        "old_value": "Blue",
+        "executed": true
+      },
+      "term": 1
+    },
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.221",
+          4001
+        ],
+        "serial": "('192.168.0.221', 4001)-2022-02-16 21:31:58.751834",
+        "action": "SET",
+        "position": "1",
+        "new_value": "kakoisback",
+        "old_value": "aaaa",
+        "executed": true
+      },
+      "term": 1
+    },
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.54",
+          4001
+        ],
+        "serial": "('192.168.0.54', 4001)-2022-02-16 21:32:16.759759",
+        "action": "SET",
+        "position": "2",
+        "new_value": "peroncho kootudo",
+        "old_value": "Yellow",
+        "executed": true
+      },
+      "term": 1
+    },
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.221",
+          4001
+        ],
+        "serial": "('192.168.0.221', 4001)-2022-02-16 21:32:17.017178",
+        "action": "SET",
+        "position": "2",
+        "new_value": "cartucho",
+        "old_value": "peroncho kootudo",
+        "executed": true
+      },
+      "term": 1
+    },
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.221",
+          4001
+        ],
+        "serial": "('192.168.0.221', 4001)-2022-02-16 21:32:38.261225",
+        "action": "SET",
+        "position": "2",
+        "new_value": "qwerty",
+        "old_value": "cartucho",
+        "executed": true
+      },
+      "term": 1
+    },
+    {
+      "command": {
+        "client_address": [
+          "192.168.0.54",
+          4001
+        ],
+        "serial": "('192.168.0.54', 4001)-2022-02-16 21:32:38.350906",
+        "action": "SET",
+        "position": "2",
+        "new_value": "peroncho ",
+        "old_value": "qwerty",
+        "executed": true
+      },
+      "term": 1
+    }
+  ],
+  "dict_data": {
+    "1": "kakoisback",
+    "2": "peroncho ",
+    "3": "Red",
+    "4": "Green",
+    "5": "White"
+  }
+}

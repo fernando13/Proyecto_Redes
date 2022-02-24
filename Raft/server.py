@@ -5,6 +5,7 @@ from message import Message
 from utils import *
 import threading
 
+# run a server
 # python server.py configs\server-1.json
 # sys.argv[1] -->  file.json
 

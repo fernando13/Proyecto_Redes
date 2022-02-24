@@ -92,7 +92,7 @@ class Node(object):
         n = match_list[self.quorum_size - 1]
 
         if self.state == "LEADER" and self.log_term(n) == self.current_term:
-            self.commit_index = n
+            self.commit_index = max(self.commit_index, n)
 
     def apply_log_commands(self):
         """ Applies the log commands that are safe to be executed to the state machine.
